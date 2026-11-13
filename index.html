@@ -111,6 +111,7 @@ label.f{display:grid;gap:4px;font-size:.82rem;color:var(--muted);font-weight:500
 .ab{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .ab:first-child{border-top:0}
 .tag{font-size:.74rem;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+.neMini{max-height:300px;overflow:hidden;position:relative;cursor:zoom-in;border:1px solid var(--line);border-radius:10px;background:#fff}.neMini .hojaDoc{zoom:.62;padding:18px;min-width:560px}.neMini::after{content:"";position:absolute;left:0;right:0;bottom:0;height:60px;background:linear-gradient(transparent,#fff)}
 .thumb{width:100%;max-height:260px;object-fit:contain;border-radius:8px;background:var(--line);cursor:zoom-in}
 .thumb.full{max-height:none;cursor:zoom-out}
 .err{color:var(--bad);font-size:.86rem}
@@ -1187,11 +1188,17 @@ function renderDetalle(first){
       ${canWrite&&esDueno?`<button class="danger" type="button" data-del="${esc(a.id)}" aria-label="Borrar abono">Borrar</button>`:"<span></span>"}</div>`}).join("")}</div>`:'<div class="note">Todavía no hay abonos en esta nota.</div>'}
     <div id="confAb"></div>
   </div>
+  ${(()=>{const nt=notaDeFactura(f);if(nt)return `<div class="card"><div class="toolbar"><h3 style="font-size:1.05rem">Nota de entrega</h3><span class="spacer"></span><button type="button" id="dNePdf">Ver completa / PDF</button></div><div class="neMini" id="dNeMini" role="button" tabindex="0" aria-label="Ver la nota completa">${neHTML(nt)}</div></div>`;return "";})()}
   ${f.imagen?`<div class="card"><h3 style="font-size:1.05rem">Foto de la nota</h3><img class="thumb" id="thumb" src="${BLOB}${esc(f.imagen)}" alt="Foto de la nota de entrega" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'note',textContent:'No se pudo mostrar la foto.'}))"></div>`:""}
+  ${!f.imagen&&!notaDeFactura(f)&&canWrite&&assets?`<div class="card"><div class="toolbar"><div><h3 style="font-size:1.05rem">Foto de la nota</h3><div class="note">Esta cuenta no tiene foto. Puedes subir la foto o el PDF convertido en imagen de la nota que se despachó.</div></div><span class="spacer"></span><button type="button" id="dFoto">Subir foto</button></div><div id="dFotoMsg" class="status" hidden></div></div>`:""}
+  ${f.imagen&&canWrite&&assets?`<div><button type="button" class="ghost" id="dFotoCambiar">Cambiar foto de la nota</button><div id="dFotoMsg" class="status" hidden></div></div>`:""}
   ${canWrite&&esDueno?`<div><button class="danger" type="button" id="delF">Borrar esta nota y sus abonos</button><div id="confF"></div></div>`:""}`);
   if(keep){if(keep.m!=null&&$("#aMonto"))$("#aMonto").value=keep.m;if(keep.t!=null&&$("#aTasa"))$("#aTasa").value=keep.t;if(keep.r!=null&&$("#aRef"))$("#aRef").value=keep.r;if(keep.d&&$("#aFecha"))$("#aFecha").value=keep.d;if(keep.s)$(".panel").scrollTop=keep.s;}
   if($("#aFecha")&&!$("#aFecha").value)$("#aFecha").value=hoy();
   $("#thumb")?.addEventListener("click",e=>e.target.classList.toggle("full"));
+  {const nt=notaDeFactura(f);if(nt){const ab=()=>verNeHoja(nt,true);$("#dNePdf").onclick=ab;$("#dNeMini").onclick=ab;$("#dNeMini").onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();ab();}};}}
+  for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
+    try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
   $("#verHist").onclick=()=>abrirCliente(ck(f));
   const fa=$("#fAbono");
   if(fa){
@@ -2349,6 +2356,7 @@ $("#clFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!
 
 /* ---------- Notas de entrega ---------- */
 var notasEnt=[],loadedNe=false,neTab="nueva";
+function notaDeFactura(f){return notasEnt.find(n=>"p"+n.id===f.id||(f.notaId&&n.id===f.notaId))||null;}
 const IVA=0.16;
 const neVacia=()=>({numero:"",cliente:"",rif:"",vendedor:"",fecha:hoy(),vence:"",notas:"",iva:false,items:[],pedidoId:"",cotizacion:"",editando:""});
 var ne=neVacia();
@@ -2549,7 +2557,7 @@ function renderPrecios(){
   $("#lpSin").textContent=(productos.length-con.length).toLocaleString("es-VE");
   const ult=productos.filter(p=>p.precioFecha).sort((a,b)=>String(b.precioFecha).localeCompare(String(a.precioFecha)))[0];
   $("#lpUlt").textContent=ult?fFecha(ult.precioFecha):"—";$("#lpUltSub").textContent=ult?String(ult.descripcion||"").slice(0,40):"Aún no hay cambios registrados";
-  $("#lpAjustar").hidden=!canWrite;
+  $("#lpAjustar").hidden=!(canWrite&&esDueno);
   if(document.activeElement?.closest("#lpLista"))return; // no repintar mientras escribe
   pintarPrecios();}
 function pintarPrecios(){
@@ -2557,10 +2565,10 @@ function pintarPrecios(){
   if(!loadedProd){el.innerHTML='<div class="list"><div class="empty"><span class="spin"></span>Cargando productos…</div></div>';return;}
   if(!productos.length){el.innerHTML='<div class="list"><div class="empty"><strong>Todavía no hay productos</strong><span>Cárgalos en Pedido y packing list › Productos y aquí les pones el precio.</span></div></div>';return;}
   const list=lpVisibles();
-  el.innerHTML=`<div class="toolbar" style="margin:0 0 8px"><span class="note">${list.length} de ${productos.length} productos</span><span class="spacer"></span>${canWrite&&list.length?`<button type="button" class="ghost" id="lpVaTodos">✓ Poner ${list.length>1?"los "+list.length:"este"} en la lista</button><button type="button" class="ghost" id="lpVaNinguno">Sacar ${list.length>1?"los "+list.length:"este"} de la lista</button>`:""}</div><div class="list lp"><div class="prow head"><span title="Va en la lista para clientes" style="text-align:center">Va</span><span>Producto</span><span style="text-align:right">Precio $</span><span style="text-align:center" title="Cantidad mínima por pedido (sin abrir cajas)">MOQ</span><span></span></div>${list.map((p,i)=>{const s=lpEstado[p.id]||"";const cab=(i===0||marcaDe(list[i-1])!==marcaDe(p))?`<div class="prow head" style="display:block;background:var(--accent-soft);color:var(--ink);font-weight:700">${esc(marcaDe(p))}</div>`:"";const tp=Number(p.precio)>0;
-    const va=p.enLista!==false;return cab+`<div class="prow${va?"":" fuera"}" data-p="${esc(p.id)}"><label class="va" title="${va?"Va":"No va"} en la lista para clientes"><input type="checkbox" data-va ${va?"checked":""} ${canWrite?"":"disabled"} aria-label="${esc(p.descripcion)} va en la lista para clientes"></label><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(p.descripcion)}</div><div class="sub">${esc(p.referencia||"—")} · ${esc(p.codigo)}${p.unidad?" · "+esc(p.unidad):""}${p.precioFecha?" · cambió "+fFecha(p.precioFecha):""}${va?"":" · <b>no va en la lista</b>"}</div></span>
-    <label class="pin${tp?"":" sinp"}"><span>$</span><input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" aria-label="Precio de ${esc(p.descripcion)}" value="${tp?r2(p.precio).toFixed(2):""}" placeholder="—" ${canWrite?"":"readonly"}></label>
-    <label class="pin moq"><input type="text" data-moq inputmode="numeric" enterkeyhint="next" autocomplete="off" aria-label="MOQ (mínimo a pedir) de ${esc(p.descripcion)}" value="${Number(p.moq)>0?Number(p.moq):""}" placeholder="—" ${canWrite?"":"readonly"}></label>
+  el.innerHTML=`<div class="toolbar" style="margin:0 0 8px"><span class="note">${list.length} de ${productos.length} productos</span><span class="spacer"></span>${(canWrite&&esDueno)&&list.length?`<button type="button" class="ghost" id="lpVaTodos">✓ Poner ${list.length>1?"los "+list.length:"este"} en la lista</button><button type="button" class="ghost" id="lpVaNinguno">Sacar ${list.length>1?"los "+list.length:"este"} de la lista</button>`:""}</div><div class="list lp"><div class="prow head"><span title="Va en la lista para clientes" style="text-align:center">Va</span><span>Producto</span><span style="text-align:right">Precio $</span><span style="text-align:center" title="Cantidad mínima por pedido (sin abrir cajas)">MOQ</span><span></span></div>${list.map((p,i)=>{const s=lpEstado[p.id]||"";const cab=(i===0||marcaDe(list[i-1])!==marcaDe(p))?`<div class="prow head" style="display:block;background:var(--accent-soft);color:var(--ink);font-weight:700">${esc(marcaDe(p))}</div>`:"";const tp=Number(p.precio)>0;
+    const va=p.enLista!==false;return cab+`<div class="prow${va?"":" fuera"}" data-p="${esc(p.id)}"><label class="va" title="${va?"Va":"No va"} en la lista para clientes"><input type="checkbox" data-va ${va?"checked":""} ${(canWrite&&esDueno)?"":"disabled"} aria-label="${esc(p.descripcion)} va en la lista para clientes"></label><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(p.descripcion)}</div><div class="sub">${esc(p.referencia||"—")} · ${esc(p.codigo)}${p.unidad?" · "+esc(p.unidad):""}${p.precioFecha?" · cambió "+fFecha(p.precioFecha):""}${va?"":" · <b>no va en la lista</b>"}</div></span>
+    <label class="pin${tp?"":" sinp"}"><span>$</span><input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" aria-label="Precio de ${esc(p.descripcion)}" value="${tp?r2(p.precio).toFixed(2):""}" placeholder="—" ${(canWrite&&esDueno)?"":"readonly"}></label>
+    <label class="pin moq"><input type="text" data-moq inputmode="numeric" enterkeyhint="next" autocomplete="off" aria-label="MOQ (mínimo a pedir) de ${esc(p.descripcion)}" value="${Number(p.moq)>0?Number(p.moq):""}" placeholder="—" ${(canWrite&&esDueno)?"":"readonly"}></label>
     <span class="st ${s==="ok"?"ok":s==="err"?"err":""}" aria-live="polite">${s==="ok"?"✓":s==="err"?"!":s==="s"?'<span class="spin"></span>':""}</span></div>`;}).join("")||'<div class="empty">Ningún producto coincide.</div>'}</div>`;
   el.querySelectorAll("[data-p] input[data-va]").forEach(c=>c.onchange=async()=>{const id=c.closest("[data-p]").dataset.p;c.closest("[data-p]").classList.toggle("fuera",!c.checked);
     try{await db.doc("productos/"+id).update({enLista:c.checked});}catch(e){c.checked=!c.checked;lpMsg("No se pudo guardar. Revisa la conexión e intenta de nuevo.","err");}});
@@ -2581,7 +2589,7 @@ function pintarPrecios(){
     inp.onchange=()=>guardarPrecio(inp.closest("[data-p]").dataset.p,inp);
     inp.onblur=()=>setTimeout(()=>{if(!document.activeElement?.closest("#lpLista"))renderPrecios();},0);});}
 async function guardarPrecio(id,inp){
-  const p=productos.find(x=>x.id===id);if(!p||!canWrite||!db)return;
+  const p=productos.find(x=>x.id===id);if(!p||!(canWrite&&esDueno)||!db)return;
   const raw=String(inp.value).trim().replace(/\s|\$/g,"");
   const v=raw===""?0:parseFloat(raw.includes(",")?raw.replace(/\./g,"").replace(",","."):raw);
   const st=inp.closest("[data-p]").querySelector(".st");
@@ -2594,7 +2602,7 @@ async function guardarPrecio(id,inp){
     marca("ok");lpMsg("");setTimeout(()=>{if(lpEstado[id]==="ok"){delete lpEstado[id];}},4000);}
   catch(e){marca("err");lpMsg("No se pudo guardar ese precio. Revisa la conexión e intenta de nuevo.","err");}}
 async function guardarMoq(id,inp){
-  const p=productos.find(x=>x.id===id);if(!p||!canWrite||!db)return;
+  const p=productos.find(x=>x.id===id);if(!p||!(canWrite&&esDueno)||!db)return;
   const raw=String(inp.value).trim().replace(/[\s.,]/g,"");
   const st=inp.closest("[data-p]").querySelector(".st");
   const marca=s=>{lpEstado[id]=s;st.className="st "+(s==="ok"?"ok":s==="err"?"err":"");st.innerHTML=s==="ok"?"✓":s==="err"?"!":s==="s"?'<span class="spin"></span>':"";};
