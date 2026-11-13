@@ -111,6 +111,14 @@ label.f{display:grid;gap:4px;font-size:.82rem;color:var(--muted);font-weight:500
 .ab{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .ab:first-child{border-top:0}
 .tag{font-size:.74rem;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+.nsum{gap:10px}.nshead{display:flex;justify-content:space-between;align-items:start;gap:10px}
+.nslist{display:grid;border-top:1px solid var(--line)}.nsl{display:grid;grid-template-columns:3.2rem minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line)}
+.nsl .nsq{color:var(--muted);text-align:right}.nsd{min-width:0;overflow-wrap:anywhere}.nsd small{display:block;color:var(--muted);font-size:.78rem}
+.nslist .linkbtn{justify-self:start;margin-top:6px}
+.nstot{display:grid;gap:4px}.nstot>div{display:flex;justify-content:space-between;gap:10px;color:var(--muted)}.nstot .big2{color:var(--ink);font-weight:700;font-size:1.1rem;padding-top:4px}
+.wabtn{background:#1f8f4e;color:#fff;border-color:#1f8f4e;font-weight:600}.wabtn:hover{filter:brightness(1.08);border-color:#1f8f4e}
+a.wabtn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:8px;padding:8px 14px;min-height:40px}
+.waText{width:100%;min-height:220px;font:inherit;font-size:.92rem;line-height:1.45;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--surface);color:var(--ink);box-sizing:border-box;resize:vertical}
 .neMini{position:relative;cursor:zoom-in;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}.neMini .hojaDoc{padding:16px}.neMini .hojaDoc table{font-size:12px}
 .neMini .hojaDoc .meta{grid-template-columns:1fr}.neMini .hojaDoc .phead img{width:72px}.neMini .hojaDoc .firmas{display:none}
 @media (max-width:560px){.neMini .hojaDoc{zoom:.82;padding:12px}}
@@ -1188,8 +1196,14 @@ function renderDetalle(first){
     <div class="toolbar"><button class="primary" type="submit" id="aGuardar">Registrar abono</button><button type="button" id="aTotal">Pagar saldo completo (${fmt(f.saldo)})</button></div>
   </form>`:f.saldo<=0?`<div class="status ok">✓ Esta cuenta está pagada.</div>`:""}
   ${msgAbono?`<div class="status ok" role="status">✓ ${esc(msgAbono)}</div>`:""}
-  ${(()=>{const nt=notaDeFactura(f);if(nt)return `<div class="card"><div class="toolbar"><h3 style="font-size:1.05rem">Nota de entrega</h3><span class="spacer"></span><button type="button" id="dNePdf">Ver completa / PDF</button></div><div class="neMini" id="dNeMini" role="button" tabindex="0" aria-label="Ver la nota completa">${neHTML(nt)}</div></div>`;return "";})()}
+  ${(()=>{const nt=notaDeFactura(f);if(!nt)return "";const its=nt.items||[];const mx=5;const u=its.reduce((a,i)=>a+(Number(i.cantidad)||0),0);
+    const li=i=>`<div class="nsl"><span class="num nsq">${Number(i.cantidad)||0} ×</span><span class="nsd">${esc(i.descripcion)}<small>${esc(i.referencia||i.codigo)}${descDe(i)?` · desc. ${descDe(i)}%`:""}</small></span><span class="num">${fmt(subDe(i))}</span></div>`;
+    return `<div class="card nsum"><div class="nshead"><div><div class="eyebrow">Nota de entrega</div><div class="mono" style="font-weight:700;font-size:1.05rem">N° ${esc(nt.numero)}</div></div><div class="note" style="text-align:right">${fFecha(nt.fecha)}${nt.vence?`<br>vence ${fFecha(nt.vence)}`:""}</div></div>
+      <div class="nslist">${its.slice(0,mx).map(li).join("")}<div id="nsMas" hidden>${its.slice(mx).map(li).join("")}</div>${its.length>mx?`<button type="button" class="linkbtn" id="nsVerMas">Ver ${its.length-mx} producto${its.length-mx>1?"s":""} más</button>`:""}</div>
+      <div class="nstot">${nt.iva?`<div><span>Subtotal</span><span class="num">${fmt(neBase(nt))}</span></div><div><span>IVA 16%</span><span class="num">${fmt(neIva(nt))}</span></div>`:""}<div class="big2"><span>Total · ${u} pieza${u===1?"":"s"}</span><span class="num">${fmt(neTotal(nt))}</span></div></div>
+      <div class="toolbar"><button type="button" id="dNePdf">📄 Ver nota / PDF</button></div></div>`;})()}
   ${f.imagen?`<div class="card"><div class="toolbar"><h3 style="font-size:1.05rem">Foto de la nota</h3><span class="spacer"></span><span class="note">Tócala para verla en grande</span></div><img class="thumb" id="thumb" src="${BLOB}${esc(f.imagen)}" alt="Foto de la nota de entrega" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'note',textContent:'No se pudo mostrar la foto.'}))"></div>`:""}
+  <div class="card"><div class="toolbar"><div><h3 style="font-size:1.05rem">Enviar por WhatsApp</h3><div class="note">Le manda al cliente la nota, lo abonado y lo que falta por pagar.</div></div><span class="spacer"></span><button type="button" class="wabtn" id="dWa">💬 Preparar mensaje</button></div><div id="dWaBox" hidden></div></div>
   ${!f.imagen&&!notaDeFactura(f)&&canWrite&&assets?`<div class="card"><div class="toolbar"><div><h3 style="font-size:1.05rem">Foto de la nota</h3><div class="note">Esta cuenta no tiene foto. Puedes subir la foto o el PDF convertido en imagen de la nota que se despachó.</div></div><span class="spacer"></span><button type="button" id="dFoto">Subir foto</button></div><div id="dFotoMsg" class="status" hidden></div></div>`:""}
   ${f.imagen&&canWrite&&assets?`<div><button type="button" class="ghost" id="dFotoCambiar">Cambiar foto de la nota</button><div id="dFotoMsg" class="status" hidden></div></div>`:""}
   <div class="card">
@@ -1204,7 +1218,8 @@ function renderDetalle(first){
   if(keep){if(keep.m!=null&&$("#aMonto"))$("#aMonto").value=keep.m;if(keep.t!=null&&$("#aTasa"))$("#aTasa").value=keep.t;if(keep.r!=null&&$("#aRef"))$("#aRef").value=keep.r;if(keep.d&&$("#aFecha"))$("#aFecha").value=keep.d;if(keep.s)$(".panel").scrollTop=keep.s;}
   if($("#aFecha")&&!$("#aFecha").value)$("#aFecha").value=hoy();
   $("#thumb")?.addEventListener("click",e=>verImagen(e.target.src));
-  {const nt=notaDeFactura(f);if(nt){const ab=()=>verNeHoja(nt,true);$("#dNePdf").onclick=ab;$("#dNeMini").onclick=ab;$("#dNeMini").onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();ab();}};}}
+  {const nt=notaDeFactura(f);if(nt){$("#dNePdf").onclick=()=>verNeHoja(nt,true);$("#nsVerMas")&&($("#nsVerMas").onclick=()=>{$("#nsMas").hidden=false;$("#nsVerMas").remove();});}}
+  $("#dWa").onclick=()=>abrirWaCobro(f);
   for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
     try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
   $("#verHist").onclick=()=>abrirCliente(ck(f));
@@ -2375,6 +2390,21 @@ function verImagen(src){const v=document.createElement("div");v.className="visor
 
 /* ---------- Notas de entrega ---------- */
 var notasEnt=[],loadedNe=false,neTab="nueva";
+function textoCobro(f){const nt=notaDeFactura(f);const L=[`*DISTRIBUIDORA BELIDAI 18, C.A.*`,"",`Hola, ${String(f.cliente||"").trim()}. Le enviamos el estado de su nota de entrega *N° ${f.numero||"—"}* del ${fFecha(f.fecha)}${venceDe(f)?` (vence el ${fFecha(venceDe(f))})`:""}:`,""];
+  if(nt){for(const i of nt.items||[])L.push(`• ${Number(i.cantidad)||0} × ${String(i.descripcion||"").trim()} — ${fmt(subDe(i))}`);if(nt.iva)L.push(`• IVA 16% — ${fmt(neIva(nt))}`);L.push("");}
+  L.push(`Total de la nota: ${fmt(f.montoUSD)}`);if(f.abonado>0)L.push(`Abonado: ${fmt(f.abonado)}`);
+  L.push(f.saldo>0?`*Saldo pendiente: ${fmt(f.saldo)}*`:`*✓ Esta nota está pagada. ¡Gracias!*`);
+  if(f.saldo>0)L.push("","Puede pagar por Zelle, Binance, USDT, efectivo o bolívares a la tasa del día. Por favor envíenos el comprobante por esta vía.","","¡Gracias por su compra!");
+  return L.join("\n");}
+function abrirWaCobro(f){const box=$("#dWaBox");if(!box)return;if(!box.hidden){box.hidden=true;return;}
+  const c=cliMaestro(f.cliente,f.rif);const tel=c?.telefonos||"";
+  box.hidden=false;box.innerHTML=`<div class="grid2" style="margin-top:6px"><label class="f">Teléfono del cliente<input id="waTel" inputmode="tel" autocomplete="off" value="${esc(tel)}" placeholder="0414-1234567"></label><div class="note" style="align-self:end">${tel?"Tomado de la ficha del cliente.":"Si lo dejas vacío, WhatsApp te deja elegir el contacto."}</div></div>
+    <label class="f" style="margin-top:8px">Mensaje (puedes cambiarlo)<textarea class="waText" id="waTxt">${esc(textoCobro(f))}</textarea></label>
+    <div class="toolbar" style="margin-top:8px"><span class="spacer"></span><button type="button" id="waCopy">Copiar mensaje</button><a class="wabtn" id="waGo" target="_blank" rel="noopener">💬 Abrir en WhatsApp</a></div><div id="waMsg" class="status" hidden></div>`;
+  const upd=()=>{const t=telLimpio($("#waTel").value);$("#waGo").href=(t?"https://wa.me/"+t:"https://wa.me/")+"?text="+encodeURIComponent($("#waTxt").value);};
+  $("#waTel").oninput=upd;$("#waTxt").oninput=upd;upd();
+  $("#waCopy").onclick=async()=>{const m=$("#waMsg");m.hidden=false;try{await navigator.clipboard.writeText($("#waTxt").value);m.className="status ok";m.textContent="✓ Mensaje copiado. Pégalo en el chat del cliente.";}catch(e){$("#waTxt").select();m.className="status";m.textContent="Selecciona el texto y cópialo con Ctrl+C.";}};
+  box.scrollIntoView({block:"nearest",behavior:"smooth"});}
 function notaDeFactura(f){return notasEnt.find(n=>"p"+n.id===f.id||(f.notaId&&n.id===f.notaId))||null;}
 const IVA=0.16;
 const neVacia=()=>({numero:"",cliente:"",rif:"",vendedor:"",fecha:hoy(),vence:"",notas:"",iva:false,items:[],pedidoId:"",cotizacion:"",editando:""});
