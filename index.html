@@ -697,7 +697,7 @@ a.btnfile{text-decoration:none}
 </nav>
 </div>
 <div class="menuScrim" id="menuScrim"></div>
-<datalist id="dlProd"></datalist><datalist id="dlProvs"><option value="Argelia Intl"><option value="Nova ZL"><option value="GADS"><option value="Wequp"></datalist><datalist id="dlPdCli"></datalist>
+<datalist id="dlProd"></datalist><datalist id="dlProvs"><option value="Argelia Intl"><option value="Nova ZL"><option value="GADS"><option value="Wequp"><option value="TAMIM"></datalist><datalist id="dlPdCli"></datalist>
 <div id="printArea" aria-hidden="true"></div>
 
 <div id="overlay"></div>
@@ -1327,7 +1327,7 @@ let secGuardada="cxc";try{secGuardada=localStorage.getItem("db18.sec")||"cxc";}c
 setTimeout(()=>ir(secGuardada),0); // después de cargar todo el código (antes fallaba al abrir en "Pedido")
 
 /* ---------- Proveedores (cuentas por pagar) — guardado privado del dueño ---------- */
-const PROVS=["Argelia Intl","Nova ZL","GADS","Wequp"];
+const PROVS=["Argelia Intl","Nova ZL","GADS","Wequp","TAMIM"];
 var uid=null,provDocs=[],loadedP=false,provSel="",provEstado="abiertas",pagDet=null,pagMetodo="zelle",msgPago="";
 const provCol=()=>db.collection("data/users/"+uid);
 async function iniciarProv(){
