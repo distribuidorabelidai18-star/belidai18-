@@ -645,6 +645,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
     </section>
     <div class="toolbar"><input id="lpQ" type="search" placeholder="Buscar por nombre, referencia o código" aria-label="Buscar en la lista de precios">
       <select id="lpF" aria-label="Filtro" style="min-width:10rem"><option value="todos">Todos</option><option value="sin">Sin precio</option><option value="con">Con precio</option><option value="va">Van en la lista para clientes</option><option value="nova">No van en la lista</option></select><span class="spacer"></span>
+      <button type="button" id="lpPubVend" hidden>Publicar para vendedores</button>
       <button type="button" id="lpAjustar">Subir / bajar %</button>
       <button type="button" class="primary" id="lpPdf">Enviar a un cliente</button></div>
     <div id="lpMsg" class="status" hidden></div>
@@ -2887,6 +2888,30 @@ $("#neQ").oninput=pintarNeLista;
 
 /* ---------- Lista de precios ---------- */
 var lpEstado={};
+/* Catálogo público para la página de pedidos de los vendedores (pedido.html) */
+const CATALOGO_VEND="catalogo-vendedores.json";
+function enlacePedidos(){return location.origin+location.pathname.replace(/[^/]*$/,"")+"pedido.html";}
+function abrirPubVend(){
+  const lista=productos.filter(p=>p.enLista!==false&&Number(p.precio)>0).sort(ordenMarca);
+  const link=enlacePedidos();
+  panel(`<div class="ph"><div><div class="eyebrow">Lista de precios</div><h2>Página de pedidos para vendedores</h2><div class="note">Los vendedores abren este enlace en el teléfono, sin usuario ni clave, arman el pedido del cliente y te lo mandan ordenado por WhatsApp al +58 412-6390349.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+    <div class="card" style="display:grid;gap:8px"><b>1. Publica tus precios</b><span class="note">Se publican los <b>${lista.length}</b> productos que tienen precio y van en la lista para clientes, con foto y MOQ. Vuelve a publicar cada vez que cambies precios o metas productos nuevos.</span>
+      <div class="toolbar"><span class="spacer"></span><button type="button" class="primary" id="pvPub"${lista.length?"":" disabled"}>Publicar ahora</button></div><div id="pvPubMsg" class="status" hidden></div></div>
+    <div class="card" style="display:grid;gap:8px"><b>2. Manda este enlace a tus vendedores</b><input id="pvLink" readonly value="${esc(link)}">
+      <div class="toolbar"><span class="spacer"></span><button type="button" id="pvCopy">Copiar enlace</button><a class="wabtn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Para mandar los pedidos de tus clientes usa esta página: "+link)}">💬 Mandar por WhatsApp</a></div></div>
+    <p class="note" style="margin:0">Cualquiera que tenga el enlace puede ver los productos y precios publicados. Tus cuentas, clientes y costos no salen ahí.</p>`);
+  $("#pvCopy").onclick=async()=>{try{await navigator.clipboard.writeText(link);$("#pvCopy").textContent="✓ Copiado";}catch(e){$("#pvLink").select();}};
+  $("#pvPub").onclick=async()=>{const b=$("#pvPub"),m=$("#pvPubMsg");b.disabled=true;b.textContent="Publicando…";m.hidden=true;
+    try{await publicarCatalogo(lista);m.className="status ok";m.textContent=`✓ Publicado: ${lista.length} productos. La página de pedidos ya tiene estos precios.`;}
+    catch(e){console.error(e);m.className="status err";m.textContent="No se pudo publicar. Revisa tu conexión e intenta de nuevo.";}
+    m.hidden=false;b.disabled=false;b.textContent="Publicar ahora";};}
+async function publicarCatalogo(lista){
+  const sb=window.SB;if(!sb)throw new Error("sin conexión");
+  const data={publicado:new Date().toISOString(),productos:lista.map(p=>({c:String(p.codigo||p.id||""),r:p.referencia||"",d:p.descripcion||"",m:marcaDe(p),p:r2(Number(p.precio)),q:Number(p.moq)>0?Number(p.moq):null,u:p.unidad||"",f:p.foto||null}))};
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});const opt={upsert:true,contentType:"application/json",cacheControl:"30"};
+  let {error}=await sb.storage.from("fotos").upload(CATALOGO_VEND,blob,opt);
+  if(error){await sb.storage.from("fotos").remove([CATALOGO_VEND]);({error}=await sb.storage.from("fotos").upload(CATALOGO_VEND,blob,{...opt,upsert:false}));}
+  if(error)throw error;}
 const MARCAS_PRIMERO=["GRIVEN","SECURITY","BRICKELL"];
 const marcaDe=p=>String(p?.marca||"").trim().toUpperCase()||"SIN MARCA";
 const rangoMarca=m=>{const i=MARCAS_PRIMERO.indexOf(m);return i>=0?i:m==="SIN MARCA"?999:100;};
@@ -3025,6 +3050,7 @@ function lpPDF(J,list,o,fotos){const conF=o.fotos&&list.some(p=>fotos[p.foto]);c
   d.text("Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario.",M,y);if(conM){y+=4.5;if(y>H-M-6){d.addPage();y=M;}d.setFont("helvetica","bold");d.setTextColor(15,74,129);d.text(NOTA_MOQ,M,y);d.setFont("helvetica","normal");}d.setTextColor(0);
   const np=d.getNumberOfPages();for(let i=1;i<=np;i++){d.setPage(i);d.setFontSize(8);d.setTextColor(120);d.text("Distribuidora Belidai 18, C.A. · Lista de precios"+(o.cliente?" · "+o.cliente:""),M,H-7);d.text(`Página ${i} de ${np}`,X1,H-7,{align:"right"});}d.setTextColor(0);
   return d.output("blob");}
+$("#lpPubVend").onclick=abrirPubVend;
 $("#lpPdf").onclick=()=>{
   const filtrado=$("#lpQ").value.trim()||$("#lpF").value!=="todos";
   lpSel=new Set(productos.filter(p=>Number(p.precio)>0&&p.enLista!==false).map(p=>p.id));const nVa=lpSel.size,nCon=productos.filter(p=>Number(p.precio)>0).length;
@@ -3216,7 +3242,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   try{esDueno=user?await user.isOwner():true;}catch(e){esDueno=true;}
   if(esVendedor()){canWrite=false;$("#btnNueva").hidden=true;$("#btnProfit").hidden=true;
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
-  else if(esDueno)iniciarProv();
+  else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;}
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();},()=>{loadedPV=true;renderMv();});
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega. Los abonos los registra el dueño.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
