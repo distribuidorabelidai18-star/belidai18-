@@ -829,10 +829,21 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
           try{const bin=Uint8Array.from(atob(fo.b64),c=>c.charCodeAt(0));
             const {error}=await sb.storage.from("fotos").upload(id,new Blob([bin],{type:fo.type||"image/jpeg"}),{contentType:fo.type||"image/jpeg",upsert:true});if(error)throw error;}catch(x){console.error(x);fallas++;}}
         const filas=[];for(const [col,docs] of Object.entries(j.colecciones))for(const d of docs)filas.push({col:colName(col),id:d.id,data:d.data,updated_at:new Date().toISOString()});
+        /* fusionar: un producto que ya existe conserva su precio, MOQ, foto, ubicación y si va en la lista; solo se completan los datos que le falten */
+        let nuevos=0,existian=0;
+        if(j.fusionar){const cp=colName("productos"),pf=filas.filter(r=>r.col===cp),viejos={};
+          for(let i=0;i<pf.length;i+=150){msg(`<span class="spin"></span><span>Revisando productos que ya existen…</span>`);
+            const {data,error}=await sb.from("docs").select("id,data").eq("col",cp).in("id",pf.slice(i,i+150).map(r=>r.id));if(error)throw error;
+            for(const r of data||[])viejos[r.id]=r.data||{};}
+          for(const r of pf){const v=viejos[r.id];if(!v){nuevos++;continue;}existian++;
+            const keep={};for(const k of ["foto","ubicacion","minimo","enLista"])if(v[k]!=null&&v[k]!=="")keep[k]=v[k];
+            if(Number(v.precio)>0){keep.precio=v.precio;if(v.precioFecha)keep.precioFecha=v.precioFecha;}
+            if(Number(v.moq)>0)keep.moq=v.moq;
+            r.data={...v,...r.data,...keep};}}
         for(let i=0;i<filas.length;i+=200){msg(`<span class="spin"></span><span>Guardando datos ${Math.min(i+200,filas.length)} de ${filas.length}…</span>`);
           const {error}=await sb.from("docs").upsert(filas.slice(i,i+200));if(error)throw error;}
         Object.keys(subs).forEach(refrescar);
-        msg(`✓ Listo: ${filas.length} registros y ${fotos.length-fallas} fotos importados.${fallas?` ${fallas} fotos no se pudieron subir.`:""}`,"ok");}
+        msg(`✓ Listo: ${filas.length} registros y ${fotos.length-fallas} fotos importados.${j.fusionar?` Productos nuevos: ${nuevos}. Ya existían: ${existian} (conservan su precio, MOQ y foto).`:""}${fallas?` ${fallas} fotos no se pudieron subir.`:""}`,"ok");}
       catch(x){console.error(x);msg(x.message==="formato"?"Ese archivo no es un respaldo del programa.":"No se pudo importar: "+(x.message||x),"err");}
       $("#mgCerrar").disabled=false;};}
 
