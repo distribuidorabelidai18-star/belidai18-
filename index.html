@@ -3046,19 +3046,19 @@ var lpSel=null;
 function lpListaElegida(modo){const con=productos.filter(p=>Number(p.precio)>0);
   const l=modo==="vista"?lpVisibles().filter(p=>Number(p.precio)>0):modo==="elegir"?con.filter(p=>lpSel?.has(p.id)):modo==="todos"?con:con.filter(p=>p.enLista!==false);
   return l.slice().sort(ordenMarca);}
-function lpTextoWA(list,o){const L=[`*LISTA DE PRECIOS*`,`Distribuidora Belidai 18, C.A.`,...(o.cliente?[`Cliente: ${o.cliente}`]:[]),`Fecha: ${fFecha(hoy())}${o.validez?` · Válida hasta: ${fFecha(o.validez)}`:""}`,""];
-  list.forEach((p,i)=>{if(i===0||marcaDe(list[i-1])!==marcaDe(p))L.push(`${i?"\n":""}*${marcaDe(p)}*`);let s=`• ${p.referencia||p.codigo} – ${String(p.descripcion||"").trim()}: *${fmtP(p.precio)}*${Number(p.moq)>0?` · MOQ ${fmtMoq(p)}`:""}`;if(o.inv){const e=existencia(p.codigo);s+=e>0?` (disp. ${e.toLocaleString("es-VE")})`:" (agotado)";}L.push(s);});
-  L.push("","_Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario._");if(list.some(p=>Number(p.moq)>0))L.push("_"+NOTA_MOQ+"_");return L.join("\n");}
-function lpHTML(list,o){const logo=$(".logo")?.src||"";const conF=o.fotos&&list.some(p=>p.foto);const conM=list.some(p=>Number(p.moq)>0);
+function lpTextoWA(list,o){const cp=o.precios!==false;const L=[cp?`*LISTA DE PRECIOS*`:`*CATÁLOGO DE PRODUCTOS*`,`Distribuidora Belidai 18, C.A.`,...(o.cliente?[`Cliente: ${o.cliente}`]:[]),`Fecha: ${fFecha(hoy())}${o.validez?` · Válida hasta: ${fFecha(o.validez)}`:""}`,""];
+  list.forEach((p,i)=>{if(i===0||marcaDe(list[i-1])!==marcaDe(p))L.push(`${i?"\n":""}*${marcaDe(p)}*`);let s=`• ${p.referencia||p.codigo} – ${String(p.descripcion||"").trim()}${cp?`: *${fmtP(p.precio)}*`:""}${Number(p.moq)>0?` · MOQ ${fmtMoq(p)}`:""}`;if(o.inv){const e=existencia(p.codigo);s+=e>0?` (disp. ${e.toLocaleString("es-VE")})`:" (agotado)";}L.push(s);});
+  L.push("",cp?"_Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario._":"_Consulta los precios con tu vendedor. Sujeto a disponibilidad de inventario._");if(list.some(p=>Number(p.moq)>0))L.push("_"+NOTA_MOQ+"_");return L.join("\n");}
+function lpHTML(list,o){const cp=o.precios!==false;const logo=$(".logo")?.src||"";const conF=o.fotos&&list.some(p=>p.foto);const conM=list.some(p=>Number(p.moq)>0);
   return `<div class="hojaDoc"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:15px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
-    <div style="text-align:right"><div style="font-size:13px;font-weight:700">LISTA DE PRECIOS</div>${o.cliente?`<div><b>Cliente:</b> ${esc(o.cliente)}</div>`:""}<div>Fecha: ${fFecha(hoy())}</div>${o.validez?`<div>Válida hasta: ${fFecha(o.validez)}</div>`:""}</div></div>
-    <table><thead><tr>${conF?'<th class="c">Foto</th>':""}<th>Referencia</th><th>Descripción</th>${o.inv?'<th class="c">Disponible</th>':""}<th class="r">Precio $</th>${conM?'<th class="c">MOQ</th>':""}</tr></thead><tbody>
-    ${list.map((p,i)=>{const e=o.inv?existencia(p.codigo):0;const nc=(conF?1:0)+3+(o.inv?1:0)+(conM?1:0);return `${i===0||marcaDe(list[i-1])!==marcaDe(p)?`<tr><td colspan="${nc}" style="background:#0f4a81;color:#fff;font-weight:700;letter-spacing:.05em">${esc(marcaDe(p))}</td></tr>`:""}<tr>${conF?`<td class="c" style="width:76px;padding:3px">${p.foto?`<img src="${BLOB}${esc(p.foto)}" alt="" style="width:68px;height:68px;object-fit:contain" loading="lazy" onerror="this.remove()">`:""}</td>`:""}<td class="mono">${esc(p.referencia||p.codigo)}</td><td>${esc(p.descripcion)}</td>${o.inv?`<td class="c"${e>0?"":' style="color:#a3302a;font-weight:700"'}>${e>0?e.toLocaleString("es-VE"):"Agotado"}</td>`:""}<td class="r" style="font-weight:700;font-size:13px">${fmtP(p.precio)}</td>${conM?`<td class="c" style="font-weight:600">${fmtMoq(p)}</td>`:""}</tr>`;}).join("")}
-    </tbody></table><p style="margin:10px 0 0;font-size:10px;color:#555">Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario.${conM?"<br><b>"+NOTA_MOQ+"</b>":""}</p></div>`;}
-function lpPDF(J,list,o,fotos){const conF=o.fotos&&list.some(p=>fotos[p.foto]);const conM=list.some(p=>Number(p.moq)>0);
+    <div style="text-align:right"><div style="font-size:13px;font-weight:700">${cp?"LISTA DE PRECIOS":"CATÁLOGO DE PRODUCTOS"}</div>${o.cliente?`<div><b>Cliente:</b> ${esc(o.cliente)}</div>`:""}<div>Fecha: ${fFecha(hoy())}</div>${o.validez?`<div>Válida hasta: ${fFecha(o.validez)}</div>`:""}</div></div>
+    <table><thead><tr>${conF?'<th class="c">Foto</th>':""}<th>Referencia</th><th>Descripción</th>${o.inv?'<th class="c">Disponible</th>':""}${cp?'<th class="r">Precio $</th>':""}${conM?'<th class="c">MOQ</th>':""}</tr></thead><tbody>
+    ${list.map((p,i)=>{const e=o.inv?existencia(p.codigo):0;const nc=(conF?1:0)+(cp?3:2)+(o.inv?1:0)+(conM?1:0);return `${i===0||marcaDe(list[i-1])!==marcaDe(p)?`<tr><td colspan="${nc}" style="background:#0f4a81;color:#fff;font-weight:700;letter-spacing:.05em">${esc(marcaDe(p))}</td></tr>`:""}<tr>${conF?`<td class="c" style="width:76px;padding:3px">${p.foto?`<img src="${BLOB}${esc(p.foto)}" alt="" style="width:68px;height:68px;object-fit:contain" loading="lazy" onerror="this.remove()">`:""}</td>`:""}<td class="mono">${esc(p.referencia||p.codigo)}</td><td>${esc(p.descripcion)}</td>${o.inv?`<td class="c"${e>0?"":' style="color:#a3302a;font-weight:700"'}>${e>0?e.toLocaleString("es-VE"):"Agotado"}</td>`:""}${cp?`<td class="r" style="font-weight:700;font-size:13px">${fmtP(p.precio)}</td>`:""}${conM?`<td class="c" style="font-weight:600">${fmtMoq(p)}</td>`:""}</tr>`;}).join("")}
+    </tbody></table><p style="margin:10px 0 0;font-size:10px;color:#555">${cp?"Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario.":"Consulte los precios con su vendedor. Sujeto a disponibilidad de inventario."}${conM?"<br><b>"+NOTA_MOQ+"</b>":""}</p></div>`;}
+function lpPDF(J,list,o,fotos){const cp=o.precios!==false;const conF=o.fotos&&list.some(p=>fotos[p.foto]);const conM=list.some(p=>Number(p.moq)>0);
   const lineas=[...(o.cliente?["Cliente: "+o.cliente]:[]),"Fecha: "+fFecha(hoy()),...(o.validez?["Válida hasta: "+fFecha(o.validez)]:[])];
-  const s=pdfDoc(J,"LISTA DE PRECIOS",lineas),d=s.d,H=297,M=s.M,X1=s.X1;let y=s.y;
-  const cols=[...(conF?[{t:"FOTO",w:24,a:"center",foto:1}]:[]),{t:"REFERENCIA",w:32,f:"courier"},{t:"DESCRIPCIÓN",w:0,des:1},...(o.inv?[{t:"DISPONIBLE",w:22,a:"center"}]:[]),{t:"PRECIO $",w:26,a:"right",b:1},...(conM?[{t:"MOQ",w:22,a:"center",moq:1}]:[])];
+  const s=pdfDoc(J,cp?"LISTA DE PRECIOS":"CATÁLOGO DE PRODUCTOS",lineas),d=s.d,H=297,M=s.M,X1=s.X1;let y=s.y;
+  const cols=[...(conF?[{t:"FOTO",w:24,a:"center",foto:1}]:[]),{t:"REFERENCIA",w:32,f:"courier"},{t:"DESCRIPCIÓN",w:0,des:1},...(o.inv?[{t:"DISPONIBLE",w:22,a:"center"}]:[]),...(cp?[{t:"PRECIO $",w:26,a:"right",b:1}]:[]),...(conM?[{t:"MOQ",w:22,a:"center",moq:1}]:[])];
   cols.find(c=>c.des).w=(X1-M)-cols.reduce((x,c)=>x+c.w,0);
   const ax=(c,x)=>c.a==="center"?x+c.w/2:c.a==="right"?x+c.w-1.5:x+1.5,ao=c=>c.a?{align:c.a}:undefined;
   const cab=()=>{d.setFillColor(15,74,129);d.setDrawColor(140);d.setLineWidth(.2);d.setTextColor(255);let x=M;d.setFont("helvetica","bold");d.setFontSize(8);
@@ -3073,7 +3073,7 @@ function lpPDF(J,list,o,fotos){const conF=o.fotos&&list.some(p=>fotos[p.foto]);c
       if(c.foto){const img=fotos[p.foto];if(img){const k=Math.min((c.w-3)/img.w,(hh-3)/img.h),w=img.w*k,h=img.h*k;try{d.addImage(img.url,"JPEG",x+(c.w-w)/2,y+(hh-h)/2,w,h);}catch(_){}}}
       else{d.setFont(c.f||"helvetica",c.b?"bold":"normal");d.setFontSize(c.b?10:9);if(c.t==="DISPONIBLE"&&e<=0)d.setTextColor(163,48,42);d.text(l,ax(c,x),y+(conF?hh/2-(l.length-1)*2+1.2:4.6),ao(c));d.setTextColor(0);}x+=c.w;});y+=hh;});
   y+=5;if(y>H-M-6){d.addPage();y=M;}d.setFont("helvetica","normal");d.setFontSize(8.5);d.setTextColor(90);
-  d.text("Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario.",M,y);if(conM){y+=4.5;if(y>H-M-6){d.addPage();y=M;}d.setFont("helvetica","bold");d.setTextColor(15,74,129);d.text(NOTA_MOQ,M,y);d.setFont("helvetica","normal");}d.setTextColor(0);
+  d.text(cp?"Precios en dólares (USD), por unidad. Sujetos a cambio sin previo aviso y a disponibilidad de inventario.":"Consulte los precios con su vendedor. Sujeto a disponibilidad de inventario.",M,y);if(conM){y+=4.5;if(y>H-M-6){d.addPage();y=M;}d.setFont("helvetica","bold");d.setTextColor(15,74,129);d.text(NOTA_MOQ,M,y);d.setFont("helvetica","normal");}d.setTextColor(0);
   const np=d.getNumberOfPages();for(let i=1;i<=np;i++){d.setPage(i);d.setFontSize(8);d.setTextColor(120);d.text("Distribuidora Belidai 18, C.A. · Lista de precios"+(o.cliente?" · "+o.cliente:""),M,H-7);d.text(`Página ${i} de ${np}`,X1,H-7,{align:"right"});}d.setTextColor(0);
   return d.output("blob");}
 $("#lpPubVend").onclick=abrirPubVend;
@@ -3093,6 +3093,7 @@ $("#lpPdf").onclick=()=>{
     <div id="enElegir" hidden><input id="enQ" type="search" placeholder="Buscar producto" style="width:100%;box-sizing:border-box;margin-bottom:6px">
       <div class="toolbar" style="margin:0 0 6px"><button type="button" class="ghost" id="enTodos">Marcar todos</button><button type="button" class="ghost" id="enNinguno">Quitar todos</button></div>
       <div id="enLista" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 10px"></div></div>
+    <label class="chk"><input type="checkbox" id="enPrecios" checked> Con precios</label>
     <label class="chk"><input type="checkbox" id="enFotos" checked> Con fotos de los productos</label>
     <label class="chk"><input type="checkbox" id="enInv"> Mostrar cuánto hay disponible</label>
     <div class="note" id="enCuenta"></div>
@@ -3103,7 +3104,7 @@ $("#lpPdf").onclick=()=>{
   <p class="note" style="margin:0">El <b>PDF</b> se ve mejor y lleva las fotos: descárgalo y compártelo por WhatsApp o correo. El <b>texto</b> sirve para pegarlo directo en un chat; "Abrir en WhatsApp" te deja escoger el contacto.</p>`);
   $(".panel").style.width="min(700px,100%)";
   const modo=()=>document.querySelector('input[name="enModo"]:checked').value;
-  const opts=()=>({cliente:$("#enCli").value.trim(),validez:$("#enVal").value,fotos:$("#enFotos").checked,inv:$("#enInv").checked});
+  const opts=()=>({cliente:$("#enCli").value.trim(),validez:$("#enVal").value,fotos:$("#enFotos").checked,inv:$("#enInv").checked,precios:$("#enPrecios").checked});
   const msg=(t,c)=>{const m=$("#enMsg");m.hidden=!t;m.className="status "+(c||"");m.innerHTML=t||"";};
   const pintaSel=()=>{const q=$("#enQ").value.trim().toLowerCase();
     $("#enLista").innerHTML=productos.filter(p=>Number(p.precio)>0&&(!q||[p.descripcion,p.referencia,p.codigo].some(v=>String(v||"").toLowerCase().includes(q))))
@@ -3117,7 +3118,7 @@ $("#lpPdf").onclick=()=>{
     if(!$("#enVista").hidden)$("#enHoja").innerHTML=l.length?lpHTML(l,opts()):'<div class="empty" style="padding:20px">No hay productos para mostrar.</div>';
     wa.title=txt.length>3500?"La lista es larga: si WhatsApp no la abre completa, usa Copiar texto o el PDF.":"";};
   document.querySelectorAll('input[name="enModo"]').forEach(r=>r.onchange=()=>{if(modo()==="elegir")pintaSel();act();});
-  ["enCli","enVal","enFotos","enInv"].forEach(id=>{$("#"+id).oninput=$("#"+id).onchange=act;});
+  ["enCli","enVal","enFotos","enInv","enPrecios"].forEach(id=>{$("#"+id).oninput=$("#"+id).onchange=act;});
   $("#enQ").oninput=pintaSel;
   $("#enTodos").onclick=()=>{productos.filter(p=>Number(p.precio)>0).forEach(p=>lpSel.add(p.id));pintaSel();act();};
   $("#enNinguno").onclick=()=>{lpSel.clear();pintaSel();act();};
@@ -3130,7 +3131,7 @@ $("#lpPdf").onclick=()=>{
   $("#enPdf").onclick=async()=>{const list=lpListaElegida(modo()),o=opts();
     const dl=await window.claude?.use?.("downloads").catch(()=>null);
     if(!dl)return msg("La descarga no está disponible.","err");
-    const nombre=("Lista de precios"+(o.cliente?" "+o.cliente:" Belidai")+" "+hoy()).replace(/[\\/:*?"<>|]/g,"-");
+    const nombre=((o.precios!==false?"Lista de precios":"Catalogo")+(o.cliente?" "+o.cliente:" Belidai")+" "+hoy()).replace(/[\\/:*?"<>|]/g,"-");
     try{msg('<span class="spin"></span><span>Preparando el PDF…</span>');const J=await cargarJsPDF();const fotos={};
       if(o.fotos){const ids=[...new Set(list.map(p=>p.foto).filter(Boolean))];if(ids.length)msg(`<span class="spin"></span><span>Preparando el PDF con ${ids.length} foto${ids.length>1?"s":""}…</span>`);
         await Promise.all(ids.map(async id=>{const f=await fotoParaPDF(id);if(f)fotos[id]=f;}));}
