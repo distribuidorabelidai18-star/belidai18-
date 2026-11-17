@@ -2892,10 +2892,11 @@ var lpEstado={};
 const CATALOGO_VEND="catalogo-vendedores.json";
 function enlacePedidos(){return location.origin+location.pathname.replace(/[^/]*$/,"")+"pedido.html";}
 function abrirPubVend(){
-  const lista=productos.filter(p=>p.enLista!==false&&Number(p.precio)>0).sort(ordenMarca);
+  const lista=listaCatalogo();const ago=catalogoProds(lista).filter(x=>x.a).length;
   const link=enlacePedidos();
   panel(`<div class="ph"><div><div class="eyebrow">Lista de precios</div><h2>Página de pedidos para vendedores</h2><div class="note">Los vendedores abren este enlace en el teléfono, sin usuario ni clave, arman el pedido del cliente y te lo mandan ordenado por WhatsApp al +58 412-6390349.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
-    <div class="card" style="display:grid;gap:8px"><b>1. Publica tus precios</b><span class="note">Se publican los <b>${lista.length}</b> productos que tienen precio y van en la lista para clientes, con foto y MOQ. Vuelve a publicar cada vez que cambies precios o metas productos nuevos.</span>
+    <div class="card" style="display:grid;gap:8px"><b>1. Publica tus precios</b><span class="note">Se publican los <b>${lista.length}</b> productos que tienen precio y van en la lista para clientes, con foto y MOQ${ago?`. <b>${ago}</b> salen como <b>Agotado</b> porque no tienen existencia`:""}.</span>
+      <span class="note">Mientras tengas el programa abierto, la página se actualiza <b>sola</b> cuando cambias precios, cargas notas de entrega o metes mercancía. Este botón es para publicar al momento.</span>
       <div class="toolbar"><span class="spacer"></span><button type="button" class="primary" id="pvPub"${lista.length?"":" disabled"}>Publicar ahora</button></div><div id="pvPubMsg" class="status" hidden></div></div>
     <div class="card" style="display:grid;gap:8px"><b>2. Manda este enlace a tus vendedores</b><input id="pvLink" readonly value="${esc(link)}">
       <div class="toolbar"><span class="spacer"></span><button type="button" id="pvCopy">Copiar enlace</button><a class="wabtn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Para mandar los pedidos de tus clientes usa esta página: "+link)}">💬 Mandar por WhatsApp</a></div></div>
@@ -2905,13 +2906,27 @@ function abrirPubVend(){
     try{await publicarCatalogo(lista);m.className="status ok";m.textContent=`✓ Publicado: ${lista.length} productos. La página de pedidos ya tiene estos precios.`;}
     catch(e){console.error(e);m.className="status err";m.textContent="No se pudo publicar. Revisa tu conexión e intenta de nuevo.";}
     m.hidden=false;b.disabled=false;b.textContent="Publicar ahora";};}
+function listaCatalogo(){return productos.filter(p=>p.enLista!==false&&Number(p.precio)>0).sort(ordenMarca);}
+function catalogoProds(lista){const st=stockMap();
+  return lista.map(p=>{const c=String(p.codigo||p.id||"");const o={c,r:p.referencia||"",d:p.descripcion||"",m:marcaDe(p),p:r2(Number(p.precio)),q:Number(p.moq)>0?Number(p.moq):null,u:p.unidad||"",f:p.foto||null};if(!((st[c]||0)>0))o.a=1;return o;});}
 async function publicarCatalogo(lista){
   const sb=window.SB;if(!sb)throw new Error("sin conexión");
-  const data={publicado:new Date().toISOString(),productos:lista.map(p=>({c:String(p.codigo||p.id||""),r:p.referencia||"",d:p.descripcion||"",m:marcaDe(p),p:r2(Number(p.precio)),q:Number(p.moq)>0?Number(p.moq):null,u:p.unidad||"",f:p.foto||null}))};
+  const prods=catalogoProds(lista);const sig=JSON.stringify(prods);
+  const data={publicado:new Date().toISOString(),productos:prods};
   const blob=new Blob([JSON.stringify(data)],{type:"application/json"});const opt={upsert:true,contentType:"application/json",cacheControl:"30"};
   let {error}=await sb.storage.from("fotos").upload(CATALOGO_VEND,blob,opt);
   if(error){await sb.storage.from("fotos").remove([CATALOGO_VEND]);({error}=await sb.storage.from("fotos").upload(CATALOGO_VEND,blob,{...opt,upsert:false}));}
-  if(error)throw error;}
+  if(error)throw error;
+  try{localStorage.setItem("db18.catSig",sig);}catch(e){}}
+/* Se vuelve a publicar solo cuando cambian precios, productos o existencias (mientras el dueño tiene el programa abierto) */
+let _pubT=null,_pubOn=false;
+function programarPub(){
+  if(!_pubOn||!esDueno||esVendedor())return;
+  if(!(loadedProd&&loadedInv&&loadedNe&&loadedPed))return;
+  clearTimeout(_pubT);_pubT=setTimeout(async()=>{
+    try{const lista=listaCatalogo();if(!lista.length)return;
+      const sig=JSON.stringify(catalogoProds(lista));let ant="";try{ant=localStorage.getItem("db18.catSig")||"";}catch(e){}
+      if(sig===ant)return;await publicarCatalogo(lista);}catch(e){console.warn("No se pudo publicar el catálogo",e);}},30000);}
 const MARCAS_PRIMERO=["GRIVEN","SECURITY","BRICKELL"];
 const marcaDe=p=>String(p?.marca||"").trim().toUpperCase()||"SIN MARCA";
 const rangoMarca=m=>{const i=MARCAS_PRIMERO.indexOf(m);return i>=0?i:m==="SIN MARCA"?999:100;};
@@ -3242,16 +3257,16 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   try{esDueno=user?await user.isOwner():true;}catch(e){esDueno=true;}
   if(esVendedor()){canWrite=false;$("#btnNueva").hidden=true;$("#btnProfit").hidden=true;
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
-  else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;}
+  else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;}
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();},()=>{loadedPV=true;renderMv();});
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega. Los abonos los registra el dueño.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
   const onErr=e=>{clearTimeout(timer);loadedF=true;banner(e?.code==="revoked"?"Ya no tienes acceso a estos datos.":"Se perdió la conexión con la base de datos. Recarga la página.");render();};
-  db.collection("inventario").onSnapshot(s=>{invDocs=s.docs.map(d=>({id:d.id,...d.data()}));loadedInv=true;renderInv();},()=>{loadedInv=true;renderInv();});
-  db.collection("notas").onSnapshot(s=>{notasEnt=s.docs.map(d=>({id:d.id,...d.data()}));loadedNe=true;stockFresh();renderNe();renderInv();},()=>{loadedNe=true;renderNe();});
+  db.collection("inventario").onSnapshot(s=>{invDocs=s.docs.map(d=>({id:d.id,...d.data()}));loadedInv=true;renderInv();programarPub();},()=>{loadedInv=true;renderInv();});
+  db.collection("notas").onSnapshot(s=>{notasEnt=s.docs.map(d=>({id:d.id,...d.data()}));loadedNe=true;stockFresh();renderNe();renderInv();programarPub();},()=>{loadedNe=true;renderNe();});
   db.collection("clientes").onSnapshot(s=>{clientes=s.docs.map(d=>({id:d.id,...d.data()}));loadedCli=true;renderClientes();},()=>{loadedCli=true;renderClientes();});
-  db.collection("productos").onSnapshot(s=>{productos=s.docs.map(d=>({id:d.id,...d.data()}));loadedProd=true;renderPed();renderInv();renderCot();renderPrecios();},()=>{loadedProd=true;renderPed();renderPrecios();});
-  db.collection("pedidos").onSnapshot(s=>{pedidos=s.docs.map(d=>({id:d.id,...d.data()}));loadedPed=true;renderPed();renderInv();},()=>{loadedPed=true;renderPed();});
+  db.collection("productos").onSnapshot(s=>{productos=s.docs.map(d=>({id:d.id,...d.data()}));loadedProd=true;renderPed();renderInv();renderCot();renderPrecios();programarPub();},()=>{loadedProd=true;renderPed();renderPrecios();});
+  db.collection("pedidos").onSnapshot(s=>{pedidos=s.docs.map(d=>({id:d.id,...d.data()}));loadedPed=true;renderPed();renderInv();programarPub();},()=>{loadedPed=true;renderPed();});
   db.collection("cotizaciones").onSnapshot(s=>{cotizaciones=s.docs.map(d=>({id:d.id,...d.data()}));loadedCot=true;renderCot();},()=>{loadedCot=true;renderCot();});
   db.doc("config/reposicion").onSnapshot(s=>{repoCfg={marcas:{},...(s.exists?s.data():{})};renderInv();},()=>{});
   db.doc("config/pedidos").onSnapshot(s=>{if(s.exists)cfgPed={prefijo:"P-",inicio:1,...s.data()};renderPed(true);},()=>{});

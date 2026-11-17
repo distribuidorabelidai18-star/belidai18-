@@ -48,6 +48,9 @@ button:disabled{opacity:.5;cursor:default}
 .qty button{width:40px;height:40px;padding:0;font-size:1.2rem;line-height:1}
 .qty input{width:84px;text-align:center;font-family:var(--f-mono);padding:8px 6px}
 .warn{color:var(--warn);font-size:.8rem;font-weight:500}
+.p.ago{opacity:.55}.p.ago img{filter:grayscale(1)}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;border-radius:999px;padding:2px 9px}
+.tag.ok{background:#e0f2e8;color:#1d7a4f}.tag.no{background:#f8e1df;color:#a3302a}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(15,40,70,.12);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .bar .in{max-width:860px;margin:0 auto;display:flex;gap:12px;align-items:center}
 .bar .tot{flex:1;min-width:0}
@@ -140,18 +143,21 @@ function pintarProds(){const q=$("#q").value.trim().toLowerCase();
   let html="",ult="";
   for(const p of lista){if(p.m!==ult&&marca==="TODAS"&&!q){html+=`<div class="marca">${esc(p.m)}</div>`;ult=p.m;}
     const n=st.items[p.c]||0;
+    if(p.a){html+=`<div class="p ago">${p.f?`<img src="${esc(BASE+p.f)}" alt="" loading="lazy">`:`<div class="ni">Sin foto</div>`}
+      <div style="min-width:0"><div class="ref">${esc(p.r)}</div><div class="desc">${esc(p.d)}</div>
+        <div class="meta"><span class="precio">${fmt(p.p)}</span><span class="tag no">AGOTADO</span></div></div></div>`;continue;}
     html+=`<div class="p${n?" sel":""}" data-c="${esc(p.c)}">${p.f?`<img src="${esc(BASE+p.f)}" alt="" loading="lazy">`:`<div class="ni">Sin foto</div>`}
       <div style="min-width:0"><div class="ref">${esc(p.r)}</div><div class="desc">${esc(p.d)}</div>
-        <div class="meta"><span class="precio">${fmt(p.p)}</span><span class="note">por ${esc(p.u||"pieza")}${Number(p.q)>0?` · caja de ${p.q}`:""}</span></div>
+        <div class="meta"><span class="precio">${fmt(p.p)}</span><span class="note">por ${esc(p.u||"pieza")}${Number(p.q)>0?` · caja de ${p.q}`:""}</span><span class="tag ok">DISPONIBLE</span></div>
         <div class="qty"><button type="button" data-d="-1" aria-label="Quitar">−</button><input inputmode="numeric" aria-label="Cantidad de ${esc(p.r)}" value="${n||""}" placeholder="0"><button type="button" data-d="1" aria-label="Agregar">+</button></div>
         <div class="warn">${avisoQty(p,n)}</div></div></div>`;}
   $("#prods").innerHTML=html;
-  $("#prods").querySelectorAll(".p").forEach(el=>{const c=el.dataset.c,p=prods.find(x=>x.c===c),i=el.querySelector("input");
+  $("#prods").querySelectorAll(".p[data-c]").forEach(el=>{const c=el.dataset.c,p=prods.find(x=>x.c===c),i=el.querySelector("input");
     el.querySelectorAll("button[data-d]").forEach(b=>b.onclick=()=>{const cur=st.items[c]||0,s=paso(p);let n;
       if(b.dataset.d==="1")n=cur<s?s:Math.floor(cur/s)*s+s;else n=cur%s?Math.floor(cur/s)*s:cur-s;setQty(c,Math.max(0,n));i.value=st.items[c]||"";});
     i.oninput=()=>setQty(c,i.value.replace(/\D/g,""));});}
 
-function items(){return Object.entries(st.items).map(([c,n])=>({p:prods.find(x=>x.c===c),n})).filter(x=>x.p&&x.n>0);}
+function items(){return Object.entries(st.items).map(([c,n])=>({p:prods.find(x=>x.c===c),n})).filter(x=>x.p&&!x.p.a&&x.n>0);}
 function total(){return r2(items().reduce((s,x)=>s+x.p.p*x.n,0));}
 function pintarBar(){const it=items(),pz=it.reduce((s,x)=>s+x.n,0);
   $("#bar").classList.toggle("hidden",!it.length&&vista==="cat");
@@ -190,7 +196,8 @@ $("#enviar").onclick=()=>{if(!validar())return;window.open("https://wa.me/"+WA+"
 
 (async()=>{try{const r=await fetch(BASE+"catalogo-vendedores.json?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error(r.status);
     const j=await r.json();prods=(j.productos||[]).filter(p=>p.c&&p.p>0);
-    for(const c of Object.keys(st.items))if(!prods.some(p=>p.c===c))delete st.items[c];guardar();
+    const quitados=[];for(const c of Object.keys(st.items)){const p=prods.find(x=>x.c===c);if(!p||p.a){if(p)quitados.push(p.r);delete st.items[c];}}guardar();
+    if(quitados.length)setTimeout(()=>alert("Se quitaron de tu pedido porque se agotaron: "+quitados.join(", ")),300);
     $("#act").textContent=j.publicado?`Precios actualizados el ${fFecha(j.publicado)}`:"";
     $("#estado").classList.add("hidden");$("#cat").classList.remove("hidden");pintarMarcas();pintarProds();pintarBar();
   }catch(e){$("#estado").className="status err";$("#estado").textContent="No se pudieron cargar los productos. Revisa tu conexión y recarga la página. Si sigue igual, avisa a la oficina.";}})();
