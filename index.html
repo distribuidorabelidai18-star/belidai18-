@@ -804,7 +804,9 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
     const {data,error}=await sb.from("perfiles").select("*").eq("email",String(u.email).toLowerCase()).maybeSingle();
     if(error||!data?.rol){await sb.auth.signOut();pantallaLogin(error?"No se pudo leer tu acceso. Revisa la conexión.":"Este correo todavía no tiene acceso al programa. Pídele al dueño que lo agregue.");return;}
     perfil.rol=data.rol;perfil.email=String(u.email).toLowerCase();perfil.uid=u.id;perfil.vendedor=String(data.vendedor||"").trim();document.body.dataset.rol=data.rol;
-    $("#login")?.remove();ponerMenu();resolverListo();}
+    $("#login")?.remove();ponerMenu();resolverListo();
+    const imp=new URLSearchParams(location.search).get("importar");
+    if(imp&&perfil.rol==="dueno"&&/^[\w.-]+\.json$/.test(imp)){history.replaceState(null,"",location.pathname);importar(imp);}}
   function ponerMenu(){const side=$("#side");if(!side)return;
     const mk=(t,fn)=>{const b=document.createElement("button");b.type="button";b.className="navi";b.textContent=t;b.onclick=fn;side.append(b);return b;};
     const sep=document.createElement("span");sep.className="eyebrow";sep.id="sideCuenta";sep.style.marginTop="14px";sep.textContent=perfil.email;side.append(sep);
@@ -812,7 +814,7 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
     mk("Cerrar sesión",async()=>{await sb.auth.signOut();location.reload();});}
 
   /* ---------- Importar el respaldo exportado desde la versión de Claude ---------- */
-  function importar(){
+  function importar(desde){
     const box=document.createElement("div");box.id="migra";
     box.innerHTML=`<div class="card"><h2>Importar respaldo</h2>
       <p class="note">Elige el archivo <b>respaldo-belidai-….json</b> que bajaste de la versión de Claude. Se copian todas las cuentas, productos, cotizaciones, empleados y fotos. Si algo ya existe aquí, se reemplaza por lo del respaldo.</p>
@@ -822,8 +824,8 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
     document.body.append(box);
     const msg=(t,c)=>{const m=$("#mgMsg");m.hidden=false;m.className="status "+(c||"");m.innerHTML=t;};
     $("#mgCerrar").onclick=()=>box.remove();
-    $("#mgFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;$("#mgCerrar").disabled=true;
-      try{const j=JSON.parse(await f.text());if(!j||!j.colecciones)throw new Error("formato");
+    const cargar=async leer=>{$("#mgCerrar").disabled=true;
+      try{const j=JSON.parse(await leer());if(!j||!j.colecciones)throw new Error("formato");
         const fotos=Object.entries(j.fotos||{});let n=0,fallas=0;
         for(const [id,fo] of fotos){msg(`<span class="spin"></span><span>Subiendo fotos ${++n} de ${fotos.length}…</span>`);
           try{const bin=Uint8Array.from(atob(fo.b64),c=>c.charCodeAt(0));
@@ -848,7 +850,11 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
         Object.keys(subs).forEach(refrescar);
         msg(`✓ Listo: ${filas.length} registros y ${fotos.length-fallas} fotos importados.${j.fusionar?` Productos nuevos: ${nuevos}. Ya existían: ${existian} (conservan su precio y MOQ${(j.reemplazar||[]).includes("foto")?"; se les cambió la foto":" y foto"}).`:""}${fallas?` ${fallas} fotos no se pudieron subir.`:""}`,"ok");}
       catch(x){console.error(x);msg(x.message==="formato"?"Ese archivo no es un respaldo del programa.":"No se pudo importar: "+(x.message||x),"err");}
-      $("#mgCerrar").disabled=false;};}
+      $("#mgCerrar").disabled=false;};
+    $("#mgFile").onchange=e=>{const f=e.target.files[0];if(f)cargar(()=>f.text());};
+    /* Importar desde un archivo publicado junto al programa (carpeta importar/), sin descargarlo */
+    if(desde){$("#mgFile").hidden=true;msg('<span class="spin"></span><span>Buscando el archivo…</span>');
+      cargar(async()=>{const r=await fetch("importar/"+encodeURIComponent(desde)+"?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("No se encontró el archivo "+desde);return r.text();});}}
 
   /* ---------- Arranque ---------- */
   document.addEventListener("DOMContentLoaded",async()=>{
