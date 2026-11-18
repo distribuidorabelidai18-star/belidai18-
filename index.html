@@ -169,10 +169,12 @@ a.wabtn{display:inline-flex;align-items:center;justify-content:center;text-decor
 .eye svg{width:16px;height:16px}
 .row{box-sizing:border-box}
 .vend .row{grid-template-columns:minmax(0,2fr) 8rem 8rem 10rem}
-.com{display:grid;grid-template-columns:minmax(0,1fr) 6rem 8rem 8rem;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.com{display:grid;grid-template-columns:minmax(0,1fr) 6rem 8rem 8rem 9rem;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .com:first-child{border-top:0}.com.head{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .com .pc{display:flex;align-items:center;gap:4px}.com .pc input{text-align:right;font-family:var(--f-mono);padding:7px 8px}
-@media (max-width:600px){.com{grid-template-columns:minmax(0,1fr) 5.2rem 6.5rem}.com .c-cb{display:none}}
+@media (max-width:600px){.com{grid-template-columns:minmax(0,1fr) 5.2rem 6.5rem}.com .c-cb,.com .c-st{display:none}}
+.com .cl.lk{cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.cpEst{font-size:.75rem;font-weight:600;border-radius:999px;padding:3px 9px;justify-self:end;border:0;cursor:pointer}.cpEst.si{background:#e1f3e7;color:#1f6b3a}.cpEst.no{background:#fff4d6;color:#7a5400}
 .soon{display:grid;gap:10px;justify-items:start;padding:28px 22px}
 .soon strong{font-family:var(--f-display);font-size:1.15rem}
 body:not([data-sec="cxc"]) #cxcActions{display:none!important}
@@ -1434,7 +1436,7 @@ async function iniciarProv(){
   $('.side [data-sec="gastos"]').hidden=false;
   ponerBotonRespaldo();
   provCol().onSnapshot(s=>{const all=s.docs.map(d=>({id:d.id,...d.data()}));privAll=all;
-      provDocs=all.filter(d=>d.tipo==="factura"||d.tipo==="pago");if(!comDirty)comTasas={...(all.find(d=>d.id==="cfg-comisiones")?.tasas||{})};empDocs=all.filter(d=>d.tipo==="empleado"||d.tipo==="adelanto"||d.tipo==="pagoSemana");gastoDocs=all.filter(d=>d.tipo==="gasto");loadedG=true;renderGastos();
+      provDocs=all.filter(d=>d.tipo==="factura"||d.tipo==="pago");if(!comDirty)comTasas={...(all.find(d=>d.id==="cfg-comisiones")?.tasas||{})};comPagos=all.filter(d=>d.tipo==="pagoComision");empDocs=all.filter(d=>d.tipo==="empleado"||d.tipo==="adelanto"||d.tipo==="pagoSemana");gastoDocs=all.filter(d=>d.tipo==="gasto");loadedG=true;renderGastos();
       loadedP=true;loadedE=true;renderProv();renderEmp();renderCom();
       if(pagDet&&$("#pDet")&&!document.activeElement?.closest("#fPago"))renderPago(false);
       if(empDet&&$("#eDet")&&!document.activeElement?.closest("#fMov,#fEmpEd"))renderEmpDet(false);},
@@ -1896,13 +1898,40 @@ function pintarPorAprobar(){
 $("#btnPorAprobar").onclick=abrirPorAprobar;
 
 /* ---------- Comisiones ---------- */
-var comTasas={},comMes=null,comDirty=false;
+var comTasas={},comMes=null,comDirty=false,comPagos=[];
 function mesLabel(m){const [y,mm]=m.split("-");return ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][+mm-1]+" "+y;}
 function mesMas(m,n){let [y,mm]=m.split("-").map(Number);mm+=n;while(mm>12){mm-=12;y++;}while(mm<1){mm+=12;y--;}return y+"-"+String(mm).padStart(2,"0");}
 function comDatos(){const m=comMes,fv={};for(const f of facturas)fv[f.id]=(f.vendedor||"").trim()||"Sin vendedor";
   const g={};for(const v of new Set(Object.values(fv)))g[v]=0;
   for(const a of abonos)if((a.fecha||"").startsWith(m)&&fv[a.facturaId]!==undefined)g[fv[a.facturaId]]+=Number(a.montoUSD)||0;
-  return Object.entries(g).filter(([v])=>v!=="Sin vendedor").map(([v,c])=>{const pct=Number(comTasas[v])||0;return {v,cobrado:r2(c),pct,com:r2(c*pct/100)};}).sort((a,b)=>b.cobrado-a.cobrado||a.v.localeCompare(b.v,"es"));}
+  return Object.entries(g).filter(([v])=>v!=="Sin vendedor").map(([v,c])=>{const pct=Number(comTasas[v])||0;const pg=comPagoDe(v,m);return {v,cobrado:r2(c),pct,com:r2(c*pct/100),pagado:pg};}).sort((a,b)=>b.cobrado-a.cobrado||a.v.localeCompare(b.v,"es"));}
+const comPagoId=(v,m)=>"comision-"+m+"-"+String(v).replace(/[^A-Za-z0-9]/g,"_");
+function comPagoDe(v,m){return comPagos.find(d=>d.id===comPagoId(v,m))||null;}
+/* Comisiones de meses anteriores que todavía no se han pagado */
+function comPendAnt(v){let tot=0,meses=[];const fv={};for(const f of facturas)fv[f.id]=(f.vendedor||"").trim()||"Sin vendedor";
+  const pct=Number(comTasas[v])||0;if(!pct)return {tot:0,meses};const actual=comMes||hoy().slice(0,7);const por={};
+  for(const a of abonos){const m=(a.fecha||"").slice(0,7);if(!m||m>=actual||fv[a.facturaId]!==v)continue;por[m]=(por[m]||0)+(Number(a.montoUSD)||0);}
+  for(const [m,c] of Object.entries(por)){if(comPagoDe(v,m))continue;const com=r2(c*pct/100);if(com>0){tot+=com;meses.push(m);}}
+  return {tot:r2(tot),meses:meses.sort()};}
+function abrirComDet(v){const m=comMes;const fv={};for(const f of facturas)fv[f.id]=f;
+  const pct=Number(comTasas[v])||0;
+  const lst=abonos.filter(a=>(a.fecha||"").startsWith(m)&&((fv[a.facturaId]?.vendedor||"").trim()||"Sin vendedor")===v).sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
+  const tot=r2(lst.reduce((x,a)=>x+(Number(a.montoUSD)||0),0)),com=r2(tot*pct/100),pg=comPagoDe(v,m),ant=comPendAnt(v);
+  panel(`<div class="ph"><div><div class="eyebrow">Comisiones · ${esc(mesLabel(m))}</div><h2>${esc(v)}</h2><div class="note">Cobros del mes de las notas de este vendedor. La comisión es el ${String(pct).replace(".",",")} % de lo cobrado.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+    <div class="summary" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:0"><div><span class="eyebrow">Cobrado</span><span class="mid num">${fmt(tot)}</span><span class="note">${lst.length} abono${lst.length!==1?"s":""}</span></div><div><span class="eyebrow">Comisión</span><span class="mid num">${fmt(com)}</span></div>
+      <div><span class="eyebrow">Estado</span><span class="mid" style="color:${pg?"var(--ok)":"var(--warn,#9a5a00)"}">${pg?"Pagada":"Por pagar"}</span><span class="note">${pg?`${fFecha(pg.fecha)} · ${fmt(pg.monto)}${pg.nota?" · "+esc(pg.nota):""}`:""}</span></div></div>
+    ${ant.tot>0?`<div class="status" style="background:#fff4d6;color:#7a5400">De meses anteriores le debes ${fmt(ant.tot)} (${ant.meses.map(mesLabel).join(", ")}).</div>`:""}
+    ${lst.length?`<div class="tw"><table class="mov"><thead><tr><th>Fecha</th><th>Nota</th><th>Cliente</th><th class="r">Cobrado</th><th class="r">Comisión</th></tr></thead><tbody>${lst.map(a=>{const f=fv[a.facturaId]||{};return `<tr><td>${fFecha(a.fecha)}</td><td class="mono">${esc(f.numero||"—")}</td><td>${esc(f.cliente||a.cliente||"")}</td><td class="r">${fmt(a.montoUSD)}</td><td class="r">${fmt(r2((Number(a.montoUSD)||0)*pct/100))}</td></tr>`;}).join("")}</tbody></table></div>`:`<div class="note">No tiene cobros este mes.</div>`}
+    <div class="card" style="display:grid;gap:8px">${pg?`<b>Pago de la comisión</b><div class="note">Pagada el ${fFecha(pg.fecha)}: ${fmt(pg.monto)}${pg.nota?" · "+esc(pg.nota):""}</div><div class="toolbar"><span class="spacer"></span><button type="button" id="cdQuitar">Quitar el pago</button></div>`:
+      `<b>Registrar el pago de la comisión</b><div class="grid2"><label class="f">Monto pagado<input id="cdMonto" inputmode="decimal" value="${String(com).replace(".",",")}"></label><label class="f">Fecha<input id="cdFecha" type="date" value="${hoy()}"></label></div><label class="f">Nota (opcional)<input id="cdNota" autocomplete="off" placeholder="Ej: Zelle, efectivo, junto con el sueldo"></label><div class="toolbar"><span class="spacer"></span><button type="button" class="primary" id="cdPagar"${com>0?"":" disabled"}>Marcar como pagada</button></div>`}
+      <div id="cdMsg"></div></div>`);
+  $(".panel").style.width="min(760px,100%)";
+  const msg=(t,c)=>{$("#cdMsg").innerHTML=`<div class="${c||"status"}">${t}</div>`;};
+  $("#cdPagar")&&($("#cdPagar").onclick=async()=>{const n=num($("#cdMonto").value);if(!(n>0))return msg("Escribe el monto pagado.","err");
+    const doc={tipo:"pagoComision",vendedor:v,mes:m,monto:r2(n),comision:com,cobrado:tot,pct,fecha:$("#cdFecha").value||hoy(),nota:$("#cdNota").value.trim(),creado:Date.now()};
+    try{await provCol().doc(comPagoId(v,m)).set(doc);comPagos=comPagos.filter(d=>d.id!==comPagoId(v,m)).concat([{id:comPagoId(v,m),...doc}]);abrirComDet(v);renderCom();}
+    catch(e){msg("No se pudo guardar. Intenta de nuevo.","err");}});
+  $("#cdQuitar")&&($("#cdQuitar").onclick=async()=>{try{await provCol().doc(comPagoId(v,m)).delete();comPagos=comPagos.filter(d=>d.id!==comPagoId(v,m));abrirComDet(v);renderCom();}catch(e){msg("No se pudo quitar. Intenta de nuevo.","err");}});}
 function renderCom(){
   const card=$("#comCard");if(!card)return;card.hidden=!uid;if(!uid||sec!=="vend")return;
   comMes=comMes||hoy().slice(0,7);$("#cmMes").textContent=mesLabel(comMes);$("#cmSig").disabled=comMes>=hoy().slice(0,7);
@@ -1910,9 +1939,10 @@ function renderCom(){
   const rows=comDatos();const el=$("#comLista");
   if(!rows.length){el.innerHTML='<div class="note">Aún no hay vendedores en las notas cargadas.</div>';return;}
   const tot=rows.reduce((x,r)=>x+r.com,0);
-  el.innerHTML=`<div class="com head"><span>Vendedor</span><span class="r">%</span><span class="r c-cb">Cobrado</span><span class="r">Comisión</span></div>`+
-    rows.map(r=>`<div class="com" data-v="${esc(r.v)}"><span class="cl">${esc(r.v)}</span><span class="pc"><input inputmode="decimal" value="${r.pct?String(r.pct).replace(".",","):""}" placeholder="0" aria-label="Porcentaje de ${esc(r.v)}"><span class="sub">%</span></span><span class="r num c-cb">${priv(r.cobrado)}</span><span class="r num" style="font-weight:600" data-c>${priv(r.com)}</span></div>`).join("")+
-    `<div class="com"><b>Total comisiones</b><span></span><span class="c-cb"></span><span class="r num" style="font-weight:700" id="comTot">${priv(tot)}</span></div>`;
+  el.innerHTML=`<div class="com head"><span>Vendedor</span><span class="r">%</span><span class="r c-cb">Cobrado</span><span class="r">Comisión</span><span class="r c-st">Pago</span></div>`+
+    rows.map(r=>`<div class="com" data-v="${esc(r.v)}"><span class="cl lk" data-det role="button" tabindex="0" title="Ver detalle">${esc(r.v)}${(()=>{const a=comPendAnt(r.v);return a.tot>0?`<div class="sub" style="color:var(--bad)">Debe ${priv(a.tot)} de meses anteriores</div>`:"";})()}</span><span class="pc"><input inputmode="decimal" value="${r.pct?String(r.pct).replace(".",","):""}" placeholder="0" aria-label="Porcentaje de ${esc(r.v)}"><span class="sub">%</span></span><span class="r num c-cb">${priv(r.cobrado)}</span><span class="r num" style="font-weight:600" data-c>${priv(r.com)}</span><span class="c-st" style="display:grid">${r.com>0||r.pagado?`<button type="button" class="cpEst ${r.pagado?"si":"no"}" data-det>${r.pagado?"✓ Pagada":"Por pagar"}</button>`:""}</span></div>`).join("")+
+    `<div class="com"><b>Total comisiones</b><span></span><span class="c-cb"></span><span class="r num" style="font-weight:700" id="comTot">${priv(tot)}</span><span class="c-st"></span></div>`;
+  el.querySelectorAll("[data-det]").forEach(x=>{const go=()=>abrirComDet(x.closest(".com").dataset.v);x.onclick=go;x.onkeydown=e=>{if(e.key==="Enter")go();};});
   el.querySelectorAll(".com[data-v] input").forEach(inp=>inp.oninput=()=>{const v=inp.closest(".com").dataset.v,n=num(inp.value);comTasas[v]=n>=0?n:0;comDirty=true;$("#comMsg").textContent="Cambios sin guardar";
     const r=comDatos().find(x=>x.v===v);inp.closest(".com").querySelector("[data-c]").textContent=priv(r?.com||0);$("#comTot").textContent=priv(comDatos().reduce((x,r)=>x+r.com,0));});}
 $("#cmAnt").onclick=()=>{comMes=mesMas(comMes||hoy().slice(0,7),-1);renderCom();};
@@ -1921,8 +1951,8 @@ $("#comGuardar").onclick=async()=>{if(!uid)return;const b=$("#comGuardar");b.dis
   try{const t={};for(const [k,v] of Object.entries(comTasas))if(Number(v)>0)t[k]=Number(v);await provCol().doc("cfg-comisiones").set({tipo:"config",tasas:t});comDirty=false;$("#comMsg").textContent="✓ Porcentajes guardados";document.activeElement?.blur();renderCom();}
   catch(e){$("#comMsg").textContent="No se pudo guardar";}b.disabled=false;};
 $("#comPdf").onclick=()=>{const rows=comDatos();guardarArchivo("Comisiones "+mesLabel(comMes),J=>{const s=pdfDoc(J,"COMISIONES DE VENDEDORES",[mesLabel(comMes)]);
-  pdfTabla(s,[{t:"VENDEDOR"},{t:"% COMISIÓN",w:28,a:"right"},{t:"COBRADO EN EL MES",w:42,a:"right"},{t:"COMISIÓN",w:36,a:"right"}],
-    rows.map(r=>({v:[r.v,String(r.pct).replace(".",",")+" %",fmtP(r.cobrado),fmtP(r.com)]})).concat([{v:["Total","",fmtP(rows.reduce((x,r)=>x+r.cobrado,0)),fmtP(rows.reduce((x,r)=>x+r.com,0))],b:true}]));
+  pdfTabla(s,[{t:"VENDEDOR"},{t:"% COMISIÓN",w:26,a:"right"},{t:"COBRADO EN EL MES",w:38,a:"right"},{t:"COMISIÓN",w:30,a:"right"},{t:"PAGO",w:30}],
+    rows.map(r=>({v:[r.v,String(r.pct).replace(".",",")+" %",fmtP(r.cobrado),fmtP(r.com),r.pagado?"Pagada "+fFecha(r.pagado.fecha):(r.com>0?"Por pagar":"")]})).concat([{v:["Total","",fmtP(rows.reduce((x,r)=>x+r.cobrado,0)),fmtP(rows.reduce((x,r)=>x+r.com,0)),""],b:true}]));
   s.d.setFontSize(8.5);s.d.setTextColor(90,90,90);s.d.text("Calculado sobre los abonos cobrados en el mes.",s.M,s.y);return s.d.output("blob");},$("#comPdfMsg"));};
 
 /* ---------- Inventario ---------- */
