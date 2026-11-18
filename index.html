@@ -1131,8 +1131,8 @@ function cargarXlsx(){if(window.XLSX)return Promise.resolve(window.XLSX);if(xlsx
 let impNuevas=[];
 function abrirProfit(){
   if(!canWrite)return;impNuevas=[];
-  panel(`<div class="ph"><div><div class="eyebrow">Profit Plus</div><h2>Importar cuentas por cobrar</h2></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
-  <div class="note">En Profit, saca el reporte <b>Documentos de CXC por vendedor</b> con condición <b>Sin cancelar</b> y moneda en dólares, y expórtalo a Excel.</div>
+  panel(`<div class="ph"><div><div class="eyebrow">Profit Plus</div><h2>Importar y cuadrar con Profit</h2></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+  <div class="note">En Profit, saca el reporte <b>Documentos de CXC por vendedor</b> con condición <b>Sin cancelar</b> y moneda en dólares, y expórtalo a Excel. Se agregan las notas que falten y te muestra las que ya estaban aquí con un saldo distinto al de Profit, para cuadrarlas.</div>
   <label class="drop" id="pDrop" for="pFile"><strong>Toca para elegir el Excel de Profit</strong><span>o arrástralo aquí (.xlsx o .xls)</span><input id="pFile" type="file" accept=".xlsx,.xls,.csv" hidden></label>
   <div id="pRes"></div>`);
   const f=$("#pFile"),d=$("#pDrop");
@@ -1157,10 +1157,51 @@ async function leerProfit(file){
       ${impNuevas.length?`<div class="tw"><table class="mov"><thead><tr><th>N°</th><th>Cliente</th><th>Vendedor</th><th class="r">Neto</th><th class="r">Saldo</th></tr></thead><tbody>${impNuevas.slice(0,8).map(x=>`<tr><td class="mono">${esc(x.numero)}</td><td>${esc(x.cliente)}</td><td>${esc(x.vendedor)}</td><td class="r">${fmt(x.neto)}</td><td class="r">${fmt(x.saldo)}</td></tr>`).join("")}</tbody></table></div>${impNuevas.length>8?`<div class="note">y ${impNuevas.length-8} más.</div>`:""}
       <div class="note">Si una nota ya tiene abonos en Profit, se guarda con ese abono y solo queda el saldo pendiente.</div>
       <button class="primary" type="button" id="pGo">Importar ${impNuevas.length} nota${impNuevas.length>1?"s":""}</button>`:`<div class="status ok">✓ Todas las notas del archivo ya están cargadas.</div>`}
-      <div id="pProg"></div></div>`;
+      <div id="pProg"></div></div><div id="pCuadre"></div>`;
     $("#pGo")?.addEventListener("click",importarProfit);
+    pintarCuadre(docs);
   }catch(e){res.innerHTML=`<div class="err">${esc(e?.message||"No se pudo leer el archivo. Asegúrate de que sea el Excel exportado de Profit.")}</div>`;}
 }
+/* ---------- Cuadrar con Profit: deja el saldo de cada nota igual al de Profit ----------
+   Ajusta "pagadoPrevio" (lo cobrado antes en Profit), así no cuenta como cobranza del mes. */
+let cuadreFilas=[];
+function calcCuadre(docs){
+  const pf={};for(const d of docs)pf[String(d.numero).trim()]=d;
+  const fechas=docs.map(d=>d.fecha).filter(Boolean).sort();const ultima=fechas[fechas.length-1]||hoy();
+  const pagAb={};for(const a of abonos)pagAb[a.facturaId]=r2((pagAb[a.facturaId]||0)+(Number(a.montoUSD)||0));
+  const out=[];
+  for(const f of saldos()){
+    const num=String(f.numero||"").trim();if(!num)continue;const d=pf[num];
+    let saldoP;
+    if(d)saldoP=r2(d.saldo);
+    else{ if(!(f.saldo>0.009))continue; if((f.fecha||"")>ultima)continue; saldoP=0; }
+    const dif=r2(f.saldo-saldoP);if(Math.abs(dif)<0.01)continue;
+    const nuevoPP=r2((Number(f.montoUSD)||0)-saldoP-(pagAb[f.id]||0));
+    out.push({f,d,saldoP,dif,nuevoPP,ok:nuevoPP>=-0.005,
+      motivo:!d?"En Profit ya está pagada (no sale en el reporte de Sin cancelar)":dif>0?"En Profit tiene abonos que aquí no están":"Aquí tiene más abonos que en Profit"});}
+  return out.sort((a,b)=>(a.f.cliente||"").localeCompare(b.f.cliente||"","es")||String(a.f.numero).localeCompare(String(b.f.numero)));}
+function pintarCuadre(docs){
+  const el=$("#pCuadre");if(!el)return;cuadreFilas=calcCuadre(docs);
+  const totP=r2(docs.reduce((s,d)=>s+(Number(d.saldo)||0),0));
+  const nums=new Set(docs.map(d=>String(d.numero).trim()));
+  const totA=r2(saldos().filter(f=>nums.has(String(f.numero||"").trim())||f.saldo>0).reduce((s,f)=>s+f.saldo,0));
+  if(!cuadreFilas.length){el.innerHTML=`<div class="card"><h3 style="margin:0;font-size:1.05rem">Cuadre con Profit</h3><div class="status ok">✓ Los saldos de las notas que ya estaban aquí coinciden con Profit.</div></div>`;return;}
+  const sel=cuadreFilas.filter(x=>x.ok);
+  el.innerHTML=`<div class="card"><h3 style="margin:0;font-size:1.05rem">Cuadre con Profit</h3>
+    <div class="note">Notas que ya estaban aquí y cuyo saldo no coincide con este reporte de Profit. Al ajustar, el saldo queda igual que en Profit. No se registra como cobranza de este mes.</div>
+    <div class="tw"><table class="mov"><thead><tr><th></th><th>N°</th><th>Cliente</th><th class="r">Saldo aquí</th><th class="r">Saldo Profit</th><th>Qué pasa</th></tr></thead><tbody>
+    ${cuadreFilas.map((x,i)=>`<tr><td><input type="checkbox" data-cq="${i}" ${x.ok?"checked":"disabled"} aria-label="Ajustar nota ${esc(x.f.numero)}"></td><td class="mono">${esc(x.f.numero)}</td><td>${esc(x.f.cliente)}</td><td class="r">${fmt(x.f.saldo)}</td><td class="r">${fmt(x.saldoP)}</td><td style="white-space:normal">${esc(x.motivo)}${x.ok?"":` · <b style="color:var(--bad)">revísala a mano: los abonos de aquí suman más que lo que dice Profit</b>`}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="toolbar"><span class="note" id="cqCuenta"></span><span class="spacer"></span><button class="primary" type="button" id="cqGo">Ajustar</button></div><div id="cqMsg"></div></div>`;
+  const cuenta=()=>{const n=el.querySelectorAll("[data-cq]:checked").length;$("#cqCuenta").textContent=`${n} de ${cuadreFilas.length} marcadas`;$("#cqGo").textContent=`Ajustar ${n} nota${n!==1?"s":""}`;$("#cqGo").disabled=!n;};
+  el.querySelectorAll("[data-cq]").forEach(c=>c.onchange=cuenta);cuenta();
+  $("#cqGo").onclick=async()=>{const b=$("#cqGo"),m=$("#cqMsg");b.disabled=true;let ok=0;
+    const lst=[...el.querySelectorAll("[data-cq]:checked")].map(c=>cuadreFilas[+c.dataset.cq]);
+    for(const x of lst){m.innerHTML=`<div class="status"><span class="spin"></span><span>Ajustando ${ok+1} de ${lst.length}…</span></div>`;
+      try{await db.doc("facturas/"+x.f.id).update({pagadoPrevio:Math.max(0,x.nuevoPP),cuadreProfit:hoy()});ok++;}
+      catch(e){m.innerHTML=`<div class="err">Se ajustaron ${ok} de ${lst.length}. Revisa tu conexión y vuelve a subir el mismo Excel para terminar.</div>`;b.disabled=false;return;}}
+    m.innerHTML=`<div class="status ok" role="status">✓ ${ok} nota${ok!==1?"s":""} ajustada${ok!==1?"s":""}. Ahora el saldo coincide con Profit.</div>`;b.hidden=true;
+    el.querySelectorAll("[data-cq]").forEach(c=>c.disabled=true);};}
 async function importarProfit(){
   const btn=$("#pGo"),prog=$("#pProg");btn.disabled=true;let ok=0;const now=Date.now();
   for(const x of impNuevas){
