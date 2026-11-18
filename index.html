@@ -791,13 +791,14 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
     const logo=$(".logo")?.src||"";
     if(!configurado){el.innerHTML=`<form class="card" onsubmit="return false"><h2>Falta configurar Supabase</h2><p class="note">Abre este archivo y pega tu <b>Project URL</b> y tu <b>anon key</b> al principio, donde dice PEGA_AQUI.</p></form>`;return;}
     el.innerHTML=`<form class="card" id="fLogin" novalidate>${logo?`<img src="${logo}" alt="DB18">`:""}<h2>Entrar</h2>
-      <label class="f">Correo<input id="lgMail" type="email" autocomplete="username" required></label>
+      <label class="f">Usuario o correo<input id="lgMail" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
       <label class="f">Contraseña<input id="lgPass" type="password" autocomplete="current-password" required></label>
       <div class="err" id="lgErr" ${msg?"":"hidden"}>${msg||""}</div>
       <button class="primary" type="submit" id="lgBtn">Entrar</button></form>`;
     $("#lgMail").focus();
     $("#fLogin").onsubmit=async e=>{e.preventDefault();const b=$("#lgBtn"),er=$("#lgErr");er.hidden=true;b.disabled=true;b.textContent="Entrando…";
-      const {data,error}=await sb.auth.signInWithPassword({email:$("#lgMail").value.trim(),password:$("#lgPass").value});
+      let usr=$("#lgMail").value.trim().toLowerCase();if(usr&&!usr.includes("@"))usr=usr.replace(/\s+/g,"")+"@belidai18.app";
+      const {data,error}=await sb.auth.signInWithPassword({email:usr,password:$("#lgPass").value});
       if(error){b.disabled=false;b.textContent="Entrar";er.textContent=/invalid/i.test(error.message)?"Correo o contraseña incorrectos.":"No se pudo entrar: "+error.message;er.hidden=false;return;}
       await entrar(data.user);};}
   async function entrar(u){
@@ -1283,18 +1284,20 @@ function renderDetalle(first){
     ${Number(f.pagadoPrevio)>0?`<div class="note">Incluye ${fmt(f.pagadoPrevio)} abonados en Profit antes de importar la nota.</div>`:""}
     ${f.moneda==="Bs"?`<div class="note">Nota original: ${fmtBs(f.montoOriginal)} a tasa ${String(f.tasa).replace(".",",")} Bs/$</div>`:""}
   </div>
-  ${canWrite&&!esDueno&&f.saldo>0?`<div class="note">Los abonos de esta nota los registra el dueño.</div>`:""}
-  ${canWrite&&esDueno&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
-    <h3 style="font-size:1.05rem">Registrar abono</h3>
+  ${(()=>{const pv=pagosVend.filter(x=>x.facturaId===f.id&&(x.estado==="pendiente"||x.estado==="rechazado")).sort((a,b)=>(b.creado||0)-(a.creado||0)).slice(0,5);
+    return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}</div>`).join("")}</div>`:"";})()}
+  ${canWrite&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
+    <h3 style="font-size:1.05rem">${esDueno?"Registrar abono":"Registrar pago"}</h3>${esDueno?"":`<div class="note">El pago queda <b>por aprobar</b>: el dueño lo revisa y, al aprobarlo, se descuenta del saldo.</div>`}
     <div class="chips" role="group" aria-label="Forma de pago">${METODOS.map(m=>`<button type="button" data-m="${m.id}" aria-pressed="${m.id===metodoSel}">${esc(m.nombre)}</button>`).join("")}</div>
     <div class="grid2">
       <label class="f" id="lMonto">${metodoSel==="bs"?"Monto en Bs":"Monto en $"}<input id="aMonto" inputmode="decimal" placeholder="0,00"></label>
       ${metodoSel==="bs"?'<label class="f">Tasa (Bs por $)<input id="aTasa" inputmode="decimal" placeholder="0,00"></label>':'<label class="f">Fecha<input id="aFecha" type="date"></label>'}
     </div>
     ${metodoSel==="bs"?'<div class="grid2"><label class="f">Fecha<input id="aFecha" type="date"></label><label class="f">Referencia<input id="aRef" autocomplete="off" placeholder="Pago móvil o transferencia"></label></div>':'<label class="f">Referencia<input id="aRef" autocomplete="off" placeholder="N° de confirmación, hash o nota"></label>'}
+    ${esDueno?"":'<label class="f">Foto del comprobante (opcional)<input id="aFoto" type="file" accept="image/*"></label>'}
     <div id="aConv" class="note" hidden></div>
     <div id="aErr" class="err" hidden></div>
-    <div class="toolbar"><button class="primary" type="submit" id="aGuardar">Registrar abono</button><button type="button" id="aTotal">Pagar saldo completo (${fmt(f.saldo)})</button></div>
+    <div class="toolbar"><button class="primary" type="submit" id="aGuardar">${esDueno?"Registrar abono":"Enviar para aprobar"}</button><button type="button" id="aTotal">Pagar saldo completo (${fmt(f.saldo)})</button></div>
   </form>`:f.saldo<=0?`<div class="status ok">✓ Esta cuenta está pagada.</div>`:""}
   ${msgAbono?`<div class="status ok" role="status">✓ ${esc(msgAbono)}</div>`:""}
   ${(()=>{const nt=notaDeFactura(f);if(!nt)return "";const its=nt.items||[];const mx=5;const u=its.reduce((a,i)=>a+(Number(i.cantidad)||0),0);
@@ -1352,6 +1355,15 @@ async function guardarAbono(f){
   const usd=r2(m/t);
   if(usd>f.saldo+0.01)return fail(`El abono (${fmt(usd)}) es mayor que el saldo de ${fmt(f.saldo)}.`);
   const btn=$("#aGuardar");btn.disabled=true;btn.textContent="Guardando…";$("#aTotal").disabled=true;
+  if(!esDueno){
+    try{let foto=null;const file=$("#aFoto")?.files?.[0];if(file){let fo;try{fo=await achicarImg(file,1600,.85);}catch(e){fo=file;}foto=(await assets.upload(fo)).id;}
+      const quien=String(window.PERFIL?.email||"").split("@")[0];
+      await db.collection("pagosVend").add({estado:"pendiente",facturaId:f.id,numero:f.numero||"",cliente:f.cliente||"",vendedor:f.vendedor||"",email:window.PERFIL?.email||"",
+        reportadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),metodo:metodoSel,moneda:bs?"Bs":"USD",montoOriginal:r2(m),tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
+        referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),foto,creado:Date.now()});
+      msgAbono=`Pago de ${fmt(Math.min(usd,f.saldo))} enviado. Queda por aprobar.`;$("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
+    }catch(e){console.error(e);btn.disabled=false;$("#aTotal").disabled=false;btn.textContent="Enviar para aprobar";fail("No se pudo enviar el pago. Intenta de nuevo.");}
+    return;}
   try{
     await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:metodoSel,montoOriginal:r2(m),moneda:bs?"Bs":"USD",tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
       referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now()});
@@ -1857,13 +1869,13 @@ function pintarPorAprobar(){
   const pend=pagosVend.filter(x=>x.estado==="pendiente").sort((a,b)=>(a.creado||0)-(b.creado||0));
   const hechos=pagosVend.filter(x=>x.estado!=="pendiente").sort((a,b)=>(b.revisado||0)-(a.revisado||0)).slice(0,10);
   el.innerHTML=(pend.length?pend.map(x=>{const f=sal[x.facturaId];const bs=x.moneda==="Bs";return `<div class="pvCard" data-pv="${esc(x.id)}">${pvFoto(x)}<div style="display:grid;gap:8px;min-width:0">
-      <div><div class="cl" style="white-space:normal">${esc(x.cliente)} · Nota ${esc(x.numero||"—")}</div><div class="sub" style="white-space:normal">Reportado por <b>${esc(x.vendedor)}</b> · ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?` · Ref. ${esc(x.referencia)}`:""}</div>
+      <div><div class="cl" style="white-space:normal">${esc(x.cliente)} · Nota ${esc(x.numero||"—")}</div><div class="sub" style="white-space:normal">Reportado por <b>${esc(x.reportadoPor||x.vendedor)}</b> · ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?` · Ref. ${esc(x.referencia)}`:""}</div>
       <div class="sub">${f?`Saldo actual de la nota: <b>${fmt(f.saldo)}</b>`:`<b style="color:var(--bad)">La nota ya no existe</b>`}</div></div>
       <div class="grid2"><label class="f">${bs?"Monto en Bs":"Monto en $"}<input data-k="m" inputmode="decimal" value="${String(x.montoOriginal).replace(".",",")}"></label>${bs?`<label class="f">Tasa<input data-k="t" inputmode="decimal" value="${String(x.tasa).replace(".",",")}"></label>`:"<span></span>"}</div>
       <div class="note" data-k="u">= <b>${fmt(x.montoUSD)}</b></div>
       <div class="toolbar"><input data-k="mot" placeholder="Motivo si lo rechazas" style="flex:1;min-width:140px"><button type="button" data-a="no">Rechazar</button><button type="button" class="primary" data-a="si">✓ Aprobar</button></div>
       <div class="err" data-k="err" hidden></div></div></div>`;}).join(""):`<div class="list"><div class="empty"><strong>No hay pagos por aprobar</strong><span>✓ Todo al día.</span></div></div>`)
-    +(hechos.length?`<h3 style="font-size:1rem;margin-top:6px">Últimos revisados</h3><div class="list">${hechos.map(x=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(x.cliente)} · Nota ${esc(x.numero||"—")}</div><div class="sub" style="white-space:normal">${esc(x.vendedor)} · ${pvMonto(x)}${x.motivo?` · ${esc(x.motivo)}`:""}</div></span><span class="pvEst ${esc(x.estado)}">${x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span></div>`).join("")}</div>`:"");
+    +(hechos.length?`<h3 style="font-size:1rem;margin-top:6px">Últimos revisados</h3><div class="list">${hechos.map(x=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(x.cliente)} · Nota ${esc(x.numero||"—")}</div><div class="sub" style="white-space:normal">${esc(x.reportadoPor||x.vendedor)} · ${pvMonto(x)}${x.motivo?` · ${esc(x.motivo)}`:""}</div></span><span class="pvEst ${esc(x.estado)}">${x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span></div>`).join("")}</div>`:"");
   el.querySelectorAll(".pvCard[data-pv]").forEach(card=>{const x=pagosVend.find(p=>p.id===card.dataset.pv);if(!x)return;const q=k=>card.querySelector(`[data-k="${k}"]`);
     const usd=()=>{const m=num(q("m").value),t=x.moneda==="Bs"?num(q("t").value):1;return m>0&&t>0?r2(m/t):0;};
     card.querySelectorAll('input[data-k="m"],input[data-k="t"]').forEach(i=>i.oninput=()=>{q("u").innerHTML=`= <b>${fmt(usd())}</b>`;});
@@ -1878,7 +1890,7 @@ function pintarPorAprobar(){
       if(u>f.saldo+0.01)return fail(`El pago (${fmt(u)}) es mayor que el saldo de la nota (${fmt(f.saldo)}). Corrige el monto o la tasa.`);
       b.disabled=true;b.textContent="Aprobando…";
       try{const ab=await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:x.metodo,montoOriginal:r2(m),moneda:x.moneda,tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),
-          referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now(),comprobante:x.foto||null,reportadoPor:x.vendedor||"",pagoVendId:x.id});
+          referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now(),comprobante:x.foto||null,reportadoPor:x.reportadoPor||x.vendedor||"",pagoVendId:x.id});
         await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
       }catch(er){console.error(er);b.disabled=false;b.textContent="✓ Aprobar";fail("No se pudo aprobar. Intenta de nuevo.");}};});}
 $("#btnPorAprobar").onclick=abrirPorAprobar;
@@ -3323,8 +3335,8 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   if(esVendedor()){canWrite=false;$("#btnNueva").hidden=true;$("#btnProfit").hidden=true;
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;}
-  db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();},()=>{loadedPV=true;renderMv();});
-  if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega. Los abonos los registra el dueño.";r.hidden=false;}
+  db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
+  if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega y registrar pagos. Los pagos quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
   const onErr=e=>{clearTimeout(timer);loadedF=true;banner(e?.code==="revoked"?"Ya no tienes acceso a estos datos.":"Se perdió la conexión con la base de datos. Recarga la página.");render();};
   db.collection("inventario").onSnapshot(s=>{invDocs=s.docs.map(d=>({id:d.id,...d.data()}));loadedInv=true;renderInv();programarPub();},()=>{loadedInv=true;renderInv();});
