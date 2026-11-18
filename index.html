@@ -644,7 +644,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <div><span class="eyebrow">Último cambio</span><span class="mid" id="lpUlt">—</span><span class="note" id="lpUltSub"></span></div>
     </section>
     <div class="toolbar"><input id="lpQ" type="search" placeholder="Buscar por nombre, referencia o código" aria-label="Buscar en la lista de precios">
-      <select id="lpF" aria-label="Filtro" style="min-width:10rem"><option value="todos">Todos</option><option value="sin">Sin precio</option><option value="con">Con precio</option><option value="va">Van en la lista para clientes</option><option value="nova">No van en la lista</option></select><span class="spacer"></span>
+      <select id="lpF" aria-label="Filtro" style="min-width:10rem"><option value="todos">Todos</option><option value="sin">Sin precio</option><option value="con">Con precio</option><option value="va">Van en la lista para clientes</option><option value="nova">No van en la lista</option><option value="sinfoto">Sin foto</option></select><span class="spacer"></span>
       <button type="button" id="lpPubVend" hidden>Publicar para vendedores</button>
       <button type="button" id="lpAjustar">Subir / bajar %</button>
       <button type="button" class="primary" id="lpPdf">Enviar a un cliente</button></div>
@@ -2953,7 +2953,7 @@ const rangoMarca=m=>{const i=MARCAS_PRIMERO.indexOf(m);return i>=0?i:m==="SIN MA
 const ordenMarca=(a,b)=>{const ma=marcaDe(a),mb=marcaDe(b);return rangoMarca(ma)-rangoMarca(mb)||ma.localeCompare(mb,"es")||String(a.descripcion).localeCompare(String(b.descripcion),"es");};
 const marcasConocidas=()=>[...new Set([...MARCAS_PRIMERO,...productos.map(p=>marcaDe(p)).filter(m=>m!=="SIN MARCA")])];
 function lpVisibles(){const q=$("#lpQ").value.trim().toLowerCase(),f=$("#lpF").value;
-  return productos.filter(p=>{const tp=Number(p.precio)>0;if(f==="sin"&&tp)return false;if(f==="con"&&!tp)return false;if(f==="va"&&p.enLista===false)return false;if(f==="nova"&&p.enLista!==false)return false;
+  return productos.filter(p=>{const tp=Number(p.precio)>0;if(f==="sin"&&tp)return false;if(f==="con"&&!tp)return false;if(f==="va"&&p.enLista===false)return false;if(f==="nova"&&p.enLista!==false)return false;if(f==="sinfoto"&&p.foto)return false;
     return !q||[p.descripcion,p.referencia,p.codigo].some(v=>String(v||"").toLowerCase().includes(q));})
     .sort(ordenMarca);}
 function lpMsg(t,c){const m=$("#lpMsg");m.hidden=!t;m.className="status "+(c||"");m.innerHTML=t||"";}
