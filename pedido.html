@@ -198,7 +198,7 @@ if(MODO_CLI){document.title="Hacer pedido · Distribuidora Belidai 18";$("#fVend
     const d=new Date(t.fecha),hoy=d.toDateString()===new Date().toDateString();
     $("#tasaBox").innerHTML=`<div style="font-size:1.6rem">💱</div><div><div class="eyebrow">Tasa Binance del día</div><div class="num" style="font-size:1.35rem;font-weight:600">${fBs(t.tasa)} <span class="note" style="font-family:var(--f-body);font-weight:400">por $1</span></div>
       <div class="note">${hoy?"Actualizada hoy a las "+d.toLocaleTimeString("es-VE",{hour:"numeric",minute:"2-digit"}):"<b style='color:var(--warn)'>Del "+d.toLocaleDateString("es-VE")+": aún no se ha actualizado hoy</b>"}</div></div>`;
-    $("#tasaBox").classList.remove("hidden");pintarProds&&prods.length&&pintarProds();pintarBar();if(vista==="res")pintarRes();}).catch(()=>{});}
+    $("#tasaBox").classList.remove("hidden");if(!$("#lnkDesc")){const l=document.createElement("a");l.id="lnkDesc";l.href="descuentos.html";l.textContent="🏷️ Ver descuentos por forma de pago";l.style.cssText="grid-column:1/-1;font-weight:600;color:var(--accent)";$("#tasaBox").appendChild(l);}pintarProds&&prods.length&&pintarProds();pintarBar();if(vista==="res")pintarRes();}).catch(()=>{});}
 $("#vend").value=st.vend;$("#cli").value=st.cli;$("#nota").value=st.nota;
 $("#vend").oninput=e=>{st.vend=e.target.value;guardar();};$("#cli").oninput=e=>{st.cli=e.target.value;guardar();};$("#nota").oninput=e=>{st.nota=e.target.value;guardar();};
 $("#q").oninput=pintarProds;
