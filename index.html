@@ -380,7 +380,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <span class="spacer"></span>
       <button type="button" class="menuBtn" id="btnMenu" aria-label="Abrir menú" aria-controls="side" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
-    <div class="toolbar" id="cxcActions"><button type="button" id="btnPorAprobar" hidden>Pagos por aprobar</button><button type="button" id="btnProfit">Importar Excel de Profit</button><button class="primary" id="btnNueva" type="button">+ Cargar nota de entrega</button></div>
+    <div class="toolbar" id="cxcActions"><button type="button" id="btnTasa" hidden>Tasa del día</button><button type="button" id="btnPorAprobar" hidden>Pagos por aprobar</button><button type="button" id="btnProfit">Importar Excel de Profit</button><button class="primary" id="btnNueva" type="button">+ Cargar nota de entrega</button></div>
   </header>
 
   <div id="banner" class="banner" hidden></div>
@@ -1246,7 +1246,8 @@ function abrirCliente(k){
     <div><span class="eyebrow">Pagado</span><span class="num">${fmt(pag)}</span></div>
     <div><span class="eyebrow">Debe</span><span class="num" style="font-weight:600;color:${saldo>0?"var(--bad)":"var(--ok)"}">${fmt(saldo)}</span></div>
   </div></div>
-  <div class="toolbar"><button class="primary" type="button" id="ecPdf">Estado de cuenta en PDF</button><button type="button" id="cpy">Copiar como texto</button></div>
+  <div class="toolbar"><button class="primary" type="button" id="ecPdf">Estado de cuenta en PDF</button><button type="button" id="cpy">Copiar como texto</button>${esDueno&&!esVendedor()?'<button type="button" id="ecLink">🔗 Enlace para el cliente</button>':""}</div>
+  <div id="ecLinkBox"></div>
   <div id="ecMsg" class="status" hidden></div>
   <div id="cpyMsg"></div>
   <div class="card"><h3 style="font-size:1.05rem">Historial de movimientos</h3>
@@ -1256,6 +1257,7 @@ function abrirCliente(k){
   </div>
   <div><button class="linkbtn" type="button" id="verNotas">Ver las notas de este cliente en la lista</button></div>`);
   $("#ecPdf").onclick=()=>pdfEstadoCuenta(k,$("#ecMsg"));
+  $("#ecLink")&&($("#ecLink").onclick=()=>pintarEnlace(k,nombre,rif));
   $("#verNotas").onclick=()=>{st.cliente=k;st.tab="facturas";st.estado="todas";$("#fEstado").value="todas";syncTabs();cerrar();render();};
   $("#cpy").onclick=()=>{
     const L=["DISTRIBUIDORA BELIDAI 18, C.A. · RIF J-50222387-8","ESTADO DE CUENTA","Cliente: "+nombre,...(rif?["RIF/C.I.: "+fmtRif(rif)]:[]),"Fecha: "+fFecha(hoy()),""];
@@ -1436,7 +1438,7 @@ async function iniciarProv(){
   $('.side [data-sec="gastos"]').hidden=false;
   ponerBotonRespaldo();
   provCol().onSnapshot(s=>{const all=s.docs.map(d=>({id:d.id,...d.data()}));privAll=all;
-      provDocs=all.filter(d=>d.tipo==="factura"||d.tipo==="pago");if(!comDirty)comTasas={...(all.find(d=>d.id==="cfg-comisiones")?.tasas||{})};comPagos=all.filter(d=>d.tipo==="pagoComision");empDocs=all.filter(d=>d.tipo==="empleado"||d.tipo==="adelanto"||d.tipo==="pagoSemana");gastoDocs=all.filter(d=>d.tipo==="gasto");loadedG=true;renderGastos();
+      provDocs=all.filter(d=>d.tipo==="factura"||d.tipo==="pago");if(!comDirty)comTasas={...(all.find(d=>d.id==="cfg-comisiones")?.tasas||{})};comPagos=all.filter(d=>d.tipo==="pagoComision");enlaces={...(all.find(d=>d.id==="cfg-enlaces")?.tokens||{})};tasaDia=all.find(d=>d.id==="cfg-tasa")||tasaDia;programarCuentas();empDocs=all.filter(d=>d.tipo==="empleado"||d.tipo==="adelanto"||d.tipo==="pagoSemana");gastoDocs=all.filter(d=>d.tipo==="gasto");loadedG=true;renderGastos();
       loadedP=true;loadedE=true;renderProv();renderEmp();renderCom();
       if(pagDet&&$("#pDet")&&!document.activeElement?.closest("#fPago"))renderPago(false);
       if(empDet&&$("#eDet")&&!document.activeElement?.closest("#fMov,#fEmpEd"))renderEmpDet(false);},
@@ -1896,6 +1898,55 @@ function pintarPorAprobar(){
         await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
       }catch(er){console.error(er);b.disabled=false;b.textContent="✓ Aprobar";fail("No se pudo aprobar. Intenta de nuevo.");}};});}
 $("#btnPorAprobar").onclick=abrirPorAprobar;
+
+/* ---------- Página de consultas para clientes (consultas.html) ----------
+   Se publican archivos en el almacenamiento público: la tasa del día y, para cada cliente con enlace,
+   su estado de cuenta en un archivo con un nombre secreto (nadie puede adivinarlo). */
+var enlaces={},tasaDia=null;
+function enlaceConsultas(tok){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consultas.html"+(tok?"?c="+tok:"");}
+async function subirPublico(nombre,obj){const sb=window.SB;if(!sb)throw new Error("sin conexión");
+  const blob=new Blob([JSON.stringify(obj)],{type:"application/json"});const opt={upsert:true,contentType:"application/json",cacheControl:"30"};
+  let {error}=await sb.storage.from("fotos").upload(nombre,blob,opt);
+  if(error){await sb.storage.from("fotos").remove([nombre]);({error}=await sb.storage.from("fotos").upload(nombre,blob,{...opt,upsert:false}));}
+  if(error)throw error;}
+function cuentaPublica(k){const {notas,nombre,movs}=movimientosDe(k);const sal={};for(const f of saldos())sal[f.id]=f;const h=hoy();
+  const pend=notas.map(n=>sal[n.id]).filter(f=>f&&f.saldo>0.009).map(f=>{const ve=venceDe(f);return {numero:f.numero||"",fecha:f.fecha||"",vence:ve||"",monto:r2(f.montoUSD),saldo:r2(f.saldo),dv:ve&&ve<h?diasDesde(ve):0};})
+    .sort((a,b)=>(a.vence||a.fecha).localeCompare(b.vence||b.fecha));
+  const pagos=movs.filter(m=>m.t==="pago"&&!m.previo).slice(-5).reverse().map(m=>({fecha:m.fecha,monto:r2(m.monto),numero:m.n?.numero||""}));
+  return {nombre,total:r2(pend.reduce((x,n)=>x+n.saldo,0)),vencido:r2(pend.filter(n=>n.dv>0).reduce((x,n)=>x+n.saldo,0)),notas:pend,pagos};}
+async function publicarCuenta(k){const tok=enlaces[k];if(!tok)return;const c=cuentaPublica(k);
+  await subirPublico("cuenta-"+tok+".json",{...c,actualizado:new Date().toISOString()});
+  try{const m=JSON.parse(localStorage.getItem("db18.cuentaSig")||"{}");m[k]=JSON.stringify(c);localStorage.setItem("db18.cuentaSig",JSON.stringify(m));}catch(e){}}
+let _ctT=null;
+function programarCuentas(){if(!esDueno||esVendedor()||!uid||!Object.keys(enlaces).length||!(loadedF&&loadedA))return;
+  clearTimeout(_ctT);_ctT=setTimeout(async()=>{let m={};try{m=JSON.parse(localStorage.getItem("db18.cuentaSig")||"{}");}catch(e){}
+    for(const k of Object.keys(enlaces)){try{if(JSON.stringify(cuentaPublica(k))!==m[k])await publicarCuenta(k);}catch(e){console.warn("cuenta",k,e);}}},30000);}
+function pintarEnlace(k,nombre,rif){const box=$("#ecLinkBox");const tok=enlaces[k];
+  const cli=rif?clientes.find(c=>normRif(c.rif)===normRif(rif)):null;const tel=cli?telLimpio(cli.telefonos):"";
+  if(!tok){box.innerHTML=`<div class="card" style="display:grid;gap:8px"><b>Enlace de estado de cuenta</b><div class="note">Se crea un enlace privado para <b>${esc(nombre)}</b>. Al abrirlo ve lo que debe, nota por nota, siempre al día. Nadie más puede ver su cuenta sin ese enlace.</div>
+    <div class="toolbar"><span class="spacer"></span><button class="primary" type="button" id="elCrear">Crear enlace</button></div><div id="elMsg"></div></div>`;
+    $("#elCrear").onclick=async()=>{const b=$("#elCrear");b.disabled=true;b.textContent="Creando…";
+      try{const t=[...crypto.getRandomValues(new Uint8Array(16))].map(x=>x.toString(16).padStart(2,"0")).join("");enlaces={...enlaces,[k]:t};
+        await provCol().doc("cfg-enlaces").set({tipo:"config",tokens:enlaces});await publicarCuenta(k);pintarEnlace(k,nombre,rif);}
+      catch(e){console.error(e);b.disabled=false;b.textContent="Crear enlace";$("#elMsg").innerHTML='<div class="err">No se pudo crear. Intenta de nuevo.</div>';}};return;}
+  const link=enlaceConsultas(tok);const txt=`Hola, le escribe Distribuidora Belidai 18. Aquí puede ver su estado de cuenta actualizado cuando quiera, además de la tasa del día y nuestros productos: ${link}`;
+  box.innerHTML=`<div class="card" style="display:grid;gap:8px"><b>Enlace de estado de cuenta</b><input readonly value="${esc(link)}" onclick="this.select()">
+    <div class="toolbar"><button type="button" id="elQuitar" class="ghost">Desactivar enlace</button><span class="spacer"></span><button type="button" id="elCopy">Copiar enlace</button><a class="wabtn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(txt)}">💬 Mandar al cliente</a></div>
+    <div class="note">Se actualiza solo cuando registras notas o abonos (mientras tengas el programa abierto).${tel?"":" No encontré su teléfono en Clientes: WhatsApp te dejará elegir el contacto."}</div><div id="elMsg"></div></div>`;
+  $("#elCopy").onclick=async()=>{try{await navigator.clipboard.writeText(link);$("#elCopy").textContent="✓ Copiado";}catch(e){}};
+  $("#elQuitar").onclick=async()=>{try{const n={...enlaces};delete n[k];await provCol().doc("cfg-enlaces").set({tipo:"config",tokens:n});enlaces=n;await window.SB?.storage.from("fotos").remove(["cuenta-"+tok+".json"]);pintarEnlace(k,nombre,rif);}
+    catch(e){$("#elMsg").innerHTML='<div class="err">No se pudo desactivar. Intenta de nuevo.</div>';}};}
+function abrirTasa(){const t=tasaDia?.tasa;
+  panel(`<div class="ph"><div><div class="eyebrow">Página de consultas</div><h2>Tasa del día</h2><div class="note">La que ven los clientes en la página de consultas, con los precios convertidos a bolívares.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+    <label class="f">Tasa Binance (Bs por $)<input id="tdVal" inputmode="decimal" value="${t?String(t).replace(".",","):""}" placeholder="0,00"></label>
+    <div class="note">${tasaDia?.fecha?`Última: ${String(tasaDia.tasa).replace(".",",")} Bs/$ el ${fFecha(tasaDia.fecha.slice(0,10))}`:"Todavía no has publicado una tasa."}</div>
+    <div class="toolbar"><span class="spacer"></span><button class="primary" type="button" id="tdGo">Publicar tasa</button></div><div id="tdMsg"></div>
+    <div class="card" style="display:grid;gap:8px"><b>Enlace de la página de consultas</b><input readonly value="${esc(enlaceConsultas())}" onclick="this.select()"><div class="note">Ponlo en el mensaje de ausencia de WhatsApp Business. Ahí ven productos, precios, disponibilidad y la tasa. Para el estado de cuenta, cada cliente tiene su propio enlace (en su estado de cuenta → "Enlace para el cliente").</div></div>`);
+  $("#tdGo").onclick=async()=>{const v=num($("#tdVal").value),m=$("#tdMsg");if(!(v>0)){m.innerHTML='<div class="err">Escribe la tasa.</div>';return;}
+    const b=$("#tdGo");b.disabled=true;
+    try{const d={tipo:"config",tasa:v,fecha:new Date().toISOString()};await subirPublico("tasa-del-dia.json",{tasa:v,fecha:d.fecha});await provCol().doc("cfg-tasa").set(d);tasaDia={id:"cfg-tasa",...d};
+      m.innerHTML=`<div class="status ok">✓ Tasa publicada: ${String(v).replace(".",",")} Bs/$.</div>`;}catch(e){console.error(e);m.innerHTML='<div class="err">No se pudo publicar. Intenta de nuevo.</div>';}b.disabled=false;};}
+$("#btnTasa").onclick=abrirTasa;
 
 /* ---------- Comisiones ---------- */
 var comTasas={},comMes=null,comDirty=false,comPagos=[];
@@ -3364,7 +3415,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   try{esDueno=user?await user.isOwner():true;}catch(e){esDueno=true;}
   if(esVendedor()){canWrite=false;$("#btnNueva").hidden=true;$("#btnProfit").hidden=true;
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
-  else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;}
+  else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;}
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega y registrar pagos. Los pagos quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
@@ -3377,8 +3428,8 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   db.collection("cotizaciones").onSnapshot(s=>{cotizaciones=s.docs.map(d=>({id:d.id,...d.data()}));loadedCot=true;renderCot();},()=>{loadedCot=true;renderCot();});
   db.doc("config/reposicion").onSnapshot(s=>{repoCfg={marcas:{},...(s.exists?s.data():{})};renderInv();},()=>{});
   db.doc("config/pedidos").onSnapshot(s=>{if(s.exists)cfgPed={prefijo:"P-",inicio:1,...s.data()};renderPed(true);},()=>{});
-  db.collection("facturas").onSnapshot(s=>{facturas=s.docs.map(d=>({id:d.id,...d.data()}));_nr=null;if(!s.metadata.fromCache){clearTimeout(timer);banner("");}loadedF=true;render();if(detId&&$("#fAbono,#delF,.totals"))renderDetalle(false);},onErr);
-  db.collection("abonos").onSnapshot(s=>{abonos=s.docs.map(d=>({id:d.id,...d.data()}));loadedA=true;render();if(detId&&$(".totals"))renderDetalle(false);else if(cliK&&$(".mov")&&!$("#cpyTxt"))abrirCliente(cliK);},onErr);
+  db.collection("facturas").onSnapshot(s=>{facturas=s.docs.map(d=>({id:d.id,...d.data()}));_nr=null;if(!s.metadata.fromCache){clearTimeout(timer);banner("");}loadedF=true;render();programarCuentas();if(detId&&$("#fAbono,#delF,.totals"))renderDetalle(false);},onErr);
+  db.collection("abonos").onSnapshot(s=>{abonos=s.docs.map(d=>({id:d.id,...d.data()}));loadedA=true;render();programarCuentas();if(detId&&$(".totals"))renderDetalle(false);else if(cliK&&$(".mov")&&!$("#cpyTxt"))abrirCliente(cliK);},onErr);
 })();
 </script>
 
