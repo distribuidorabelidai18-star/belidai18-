@@ -126,6 +126,11 @@ const waLink=t=>`https://wa.me/${WA}?text=${encodeURIComponent(t)}`;
 const pide=n=>fetch(BASE+n+"?t="+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();});
 const hoyISO=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 const tok=(new URLSearchParams(location.search).get("c")||"").replace(/[^a-f0-9]/gi,"");
+const _te=new TextEncoder();
+async function _dig(s){return new Uint8Array(await crypto.subtle.digest("SHA-256",_te.encode(s)));}
+async function archivoCuenta(tok){return "cuenta-"+[...(await _dig("db18-nombre|"+tok))].slice(0,16).map(x=>x.toString(16).padStart(2,"0")).join("")+".json";}
+async function claveCuenta(tok,uso){return crypto.subtle.importKey("raw",await _dig("db18-clave|"+tok),"AES-GCM",false,[uso]);}
+const _b64=u=>btoa(String.fromCharCode(...u)),_unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let tasa=null,prods=[],marca="TODAS",cuenta=null;
 $("#waGen").href=waLink("Hola, tengo una consulta.");
 
@@ -148,7 +153,7 @@ function pintarTasa(){const b=$("#tasaBox");
 async function cargarCuenta(){const v=$("#v-cuenta");
   if(!tok){v.innerHTML=`<div class="card"><h2 style="font-size:1.15rem">Tu estado de cuenta</h2><div>Para ver cuánto debes, usa el enlace personal que te enviamos por WhatsApp. Si no lo tienes, pídelo y te lo mandamos.</div><a class="wa" href="${waLink("Hola, quiero el enlace para ver mi estado de cuenta.")}" target="_blank" rel="noopener">💬 Pedir mi enlace</a></div>`;return;}
   v.innerHTML=`<div class="card"><div class="note"><span class="spin"></span>Buscando tu cuenta…</div></div>`;
-  try{cuenta=await pide("cuenta-"+tok+".json");await tasaP;pintarCuenta();}
+  try{const e=await pide(await archivoCuenta(tok));cuenta=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:_unb64(e.iv)},await claveCuenta(tok,"decrypt"),_unb64(e.ct))));await tasaP;pintarCuenta();}
   catch(e){v.innerHTML=`<div class="card"><h2 style="font-size:1.15rem">Este enlace ya no está activo</h2><div>Pídenos uno nuevo por WhatsApp y te lo mandamos.</div><a class="wa" href="${waLink("Hola, mi enlace de estado de cuenta ya no funciona, ¿me mandan uno nuevo?")}" target="_blank" rel="noopener">💬 Pedir enlace nuevo</a></div>`;}}
 function pintarCuenta(){const c=cuenta,v=$("#v-cuenta");if(!c)return;const bs=n=>tasa?`<div class="bs">${fBs(n*tasa.tasa)}</div>`:"";
   const act=c.actualizado?new Date(c.actualizado):null;

@@ -1903,6 +1903,12 @@ $("#btnPorAprobar").onclick=abrirPorAprobar;
    Se publican archivos en el almacenamiento público: la tasa del día y, para cada cliente con enlace,
    su estado de cuenta en un archivo con un nombre secreto (nadie puede adivinarlo). */
 var enlaces={},tasaDia=null;
+const _te=new TextEncoder();
+async function _dig(s){return new Uint8Array(await crypto.subtle.digest("SHA-256",_te.encode(s)));}
+async function archivoCuenta(tok){return "cuenta-"+[...(await _dig("db18-nombre|"+tok))].slice(0,16).map(x=>x.toString(16).padStart(2,"0")).join("")+".json";}
+async function claveCuenta(tok,uso){return crypto.subtle.importKey("raw",await _dig("db18-clave|"+tok),"AES-GCM",false,[uso]);}
+const _b64=u=>btoa(String.fromCharCode(...u)),_unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+
 function enlaceConsultas(tok){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consultas.html"+(tok?"?c="+tok:"");}
 async function subirPublico(nombre,obj){const sb=window.SB;if(!sb)throw new Error("sin conexión");
   const blob=new Blob([JSON.stringify(obj)],{type:"application/json"});const opt={upsert:true,contentType:"application/json",cacheControl:"30"};
@@ -1915,7 +1921,10 @@ function cuentaPublica(k){const {notas,nombre,movs}=movimientosDe(k);const sal={
   const pagos=movs.filter(m=>m.t==="pago"&&!m.previo).slice(-5).reverse().map(m=>({fecha:m.fecha,monto:r2(m.monto),numero:m.n?.numero||""}));
   return {nombre,total:r2(pend.reduce((x,n)=>x+n.saldo,0)),vencido:r2(pend.filter(n=>n.dv>0).reduce((x,n)=>x+n.saldo,0)),notas:pend,pagos};}
 async function publicarCuenta(k){const tok=enlaces[k];if(!tok)return;const c=cuentaPublica(k);
-  await subirPublico("cuenta-"+tok+".json",{...c,actualizado:new Date().toISOString()});
+  // El archivo va cifrado con el enlace: aunque alguien viera la lista de archivos, no puede leerlo sin el enlace.
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},await claveCuenta(tok,"encrypt"),_te.encode(JSON.stringify({...c,actualizado:new Date().toISOString()}))));
+  await subirPublico(await archivoCuenta(tok),{v:1,iv:_b64(iv),ct:_b64(ct)});
   try{const m=JSON.parse(localStorage.getItem("db18.cuentaSig")||"{}");m[k]=JSON.stringify(c);localStorage.setItem("db18.cuentaSig",JSON.stringify(m));}catch(e){}}
 let _ctT=null;
 function programarCuentas(){if(!esDueno||esVendedor()||!uid||!Object.keys(enlaces).length||!(loadedF&&loadedA))return;
@@ -1934,7 +1943,7 @@ function pintarEnlace(k,nombre,rif){const box=$("#ecLinkBox");const tok=enlaces[
     <div class="toolbar"><button type="button" id="elQuitar" class="ghost">Desactivar enlace</button><span class="spacer"></span><button type="button" id="elCopy">Copiar enlace</button><a class="wabtn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(txt)}">💬 Mandar al cliente</a></div>
     <div class="note">Se actualiza solo cuando registras notas o abonos (mientras tengas el programa abierto).${tel?"":" No encontré su teléfono en Clientes: WhatsApp te dejará elegir el contacto."}</div><div id="elMsg"></div></div>`;
   $("#elCopy").onclick=async()=>{try{await navigator.clipboard.writeText(link);$("#elCopy").textContent="✓ Copiado";}catch(e){}};
-  $("#elQuitar").onclick=async()=>{try{const n={...enlaces};delete n[k];await provCol().doc("cfg-enlaces").set({tipo:"config",tokens:n});enlaces=n;await window.SB?.storage.from("fotos").remove(["cuenta-"+tok+".json"]);pintarEnlace(k,nombre,rif);}
+  $("#elQuitar").onclick=async()=>{try{const n={...enlaces};delete n[k];await provCol().doc("cfg-enlaces").set({tipo:"config",tokens:n});enlaces=n;await window.SB?.storage.from("fotos").remove([await archivoCuenta(tok)]);pintarEnlace(k,nombre,rif);}
     catch(e){$("#elMsg").innerHTML='<div class="err">No se pudo desactivar. Intenta de nuevo.</div>';}};}
 function abrirTasa(){const t=tasaDia?.tasa;
   panel(`<div class="ph"><div><div class="eyebrow">Página de consultas</div><h2>Tasa del día</h2><div class="note">La que ven los clientes en la página de consultas, con los precios convertidos a bolívares.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
