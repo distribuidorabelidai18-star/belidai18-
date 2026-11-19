@@ -19,13 +19,16 @@ language sql stable security definer set search_path = public as $$
   select upper(trim(vendedor)) from public.perfiles where lower(email) = lower(auth.jwt()->>'email') limit 1
 $$;
 
--- Lo que un vendedor puede ver: productos, SUS notas, los abonos de SUS notas y SUS pagos reportados
+-- Lo que un vendedor puede ver: productos, SUS notas, los abonos y notas de crédito de SUS notas y SUS pagos reportados
 create or replace function public.vend_puede_ver(c text, d jsonb) returns boolean
 language sql stable security definer set search_path = public as $$
   select case
     when c = 'productos' then true
     when c = 'facturas'  then upper(trim(d->>'vendedor')) = public.mi_vendedor()
     when c = 'abonos'    then exists (select 1 from public.docs f
+                                      where f.col = 'facturas' and f.id = d->>'facturaId'
+                                        and upper(trim(f.data->>'vendedor')) = public.mi_vendedor())
+    when c = 'notasCredito' then exists (select 1 from public.docs f
                                       where f.col = 'facturas' and f.id = d->>'facturaId'
                                         and upper(trim(f.data->>'vendedor')) = public.mi_vendedor())
     when c = 'pagosVend' then lower(d->>'email') = lower(auth.jwt()->>'email')
