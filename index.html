@@ -3176,7 +3176,7 @@ async function publicarCatalogo(lista){
 /* Se vuelve a publicar solo cuando cambian precios, productos o existencias (mientras el dueño tiene el programa abierto) */
 let _pubT=null,_pubOn=false;
 function programarPub(){
-  if(!_pubOn||!esDueno||esVendedor())return;
+  if(!_pubOn||esVendedor())return;
   if(!(loadedProd&&loadedInv&&loadedNe&&loadedPed))return;
   clearTimeout(_pubT);_pubT=setTimeout(async()=>{
     try{const lista=listaCatalogo();if(!lista.length)return;
@@ -3518,6 +3518,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;}
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
+  if(canWrite&&!esVendedor())_pubOn=true; // Carmen y Skarlet también actualizan la lista de pedidos al hacer notas
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega y registrar pagos. Los pagos quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
   const onErr=e=>{clearTimeout(timer);loadedF=true;banner(e?.code==="revoked"?"Ya no tienes acceso a estos datos.":"Se perdió la conexión con la base de datos. Recarga la página.");render();};
