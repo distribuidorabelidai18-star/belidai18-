@@ -1728,27 +1728,27 @@ function pdfEstadoCuenta(k,msgEl){
     return d.output("blob");},msgEl);}
 
 /* ---------- Estado de cuenta por vendedor: lo que cada vendedor tiene que cobrar ---------- */
-function edoVendDatos(v){const h=hoy();
+function edoVendDatos(v,sel){const h=hoy();
   const notas=saldos().filter(f=>f.saldo>0&&((f.vendedor||"").trim()||"Sin vendedor")===v)
     .map(f=>{const ve=venceDe(f);return {...f,ve,dv:ve&&ve<h?diasDesde(ve):0};});
-  const g={};for(const f of notas){const k=ck(f);(g[k]??={nombre:String(f.cliente||"").trim()||"Cliente sin nombre",rif:f.rif||"",notas:[],saldo:0,vencido:0,max:0});
+  const g={};for(const f of notas){const k=ck(f);(g[k]??={k,nombre:String(f.cliente||"").trim()||"Cliente sin nombre",rif:f.rif||"",notas:[],saldo:0,vencido:0,max:0});
     const o=g[k];o.notas.push(f);o.saldo=r2(o.saldo+f.saldo);if(f.dv>0){o.vencido=r2(o.vencido+f.saldo);o.max=Math.max(o.max,f.dv);}}
-  const clientes=Object.values(g).sort((a,b)=>b.max-a.max||b.saldo-a.saldo||a.nombre.localeCompare(b.nombre,"es"));
+  const clientes=Object.values(g).filter(c=>!sel||sel.has(c.k)).sort((a,b)=>b.max-a.max||b.saldo-a.saldo||a.nombre.localeCompare(b.nombre,"es"));
   clientes.forEach(c=>c.notas.sort((a,b)=>(a.ve||a.fecha||"").localeCompare(b.ve||b.fecha||"")));
   const total=r2(clientes.reduce((x,c)=>x+c.saldo,0)),vencido=r2(clientes.reduce((x,c)=>x+c.vencido,0));
-  return {v,clientes,notas:notas.length,total,vencido,alDia:r2(total-vencido)};}
-function edoVendTexto(o){const L=[`*DISTRIBUIDORA BELIDAI 18, C.A.*`,`*Cuentas por cobrar de ${o.v}*`,`Fecha: ${fFecha(hoy())}`,""];
-  if(!o.clientes.length){L.push("No tienes notas pendientes por cobrar. ✓");return L.join("\n");}
-  L.push(`Total por cobrar: *${fmt(o.total)}*`);if(o.vencido>0)L.push(`Vencido: *${fmt(o.vencido)}*`);L.push(`${o.clientes.length} cliente${o.clientes.length>1?"s":""} · ${o.notas} nota${o.notas>1?"s":""}`,"");
+  return {v,clientes,notas:clientes.reduce((x,c)=>x+c.notas.length,0),total,vencido,alDia:r2(total-vencido)};}
+function edoVendTexto(o,paraCli){const L=[`*DISTRIBUIDORA BELIDAI 18, C.A.*`,paraCli?`*Estado de cuenta*`:`*Cuentas por cobrar de ${o.v}*`,`Fecha: ${fFecha(hoy())}`,""];
+  if(!o.clientes.length){L.push(paraCli?"No tiene notas pendientes por pagar. ✓":"No tienes notas pendientes por cobrar. ✓");return L.join("\n");}
+  L.push(`${paraCli?"Total pendiente":"Total por cobrar"}: *${fmt(o.total)}*`);if(o.vencido>0)L.push(`Vencido: *${fmt(o.vencido)}*`);L.push(`${o.clientes.length} cliente${o.clientes.length>1?"s":""} · ${o.notas} nota${o.notas>1?"s":""}`,"");
   o.clientes.forEach((c,i)=>{L.push(`${i+1}. *${c.nombre}* — ${fmt(c.saldo)}${c.vencido>0?` ⚠️ vencido ${fmt(c.vencido)}`:""}`);
     for(const f of c.notas)L.push(`   • Nota ${f.numero||"—"} del ${fFecha(f.fecha)}: ${fmt(f.saldo)}${f.dv>0?` (vencida hace ${f.dv} día${f.dv>1?"s":""})`:f.ve?` (vence ${fFecha(f.ve)})`:""}`);
     L.push("");});
-  L.push("Por favor cobra primero las vencidas y envía los comprobantes indicando el número de nota.");
+  L.push(paraCli?"Agradecemos su pago, comenzando por las notas vencidas. Por favor envíe los comprobantes indicando el número de nota.":"Por favor cobra primero las vencidas y envía los comprobantes indicando el número de nota.");
   return L.join("\n");}
-function pdfEdoVend(o,msgEl){
-  guardarArchivo("Por cobrar "+String(o.v).replace(/[\\/:*?"<>|]/g,"-")+" "+hoy(),J=>{
-    const s=pdfDoc(J,"CUENTAS POR COBRAR",["Vendedor: "+o.v,"Fecha: "+fFecha(hoy())]);const d=s.d;
-    const bw=(s.X1-s.M-6)/3;[["Total por cobrar",fmtP(o.total)],["Vencido",fmtP(o.vencido)],["Al día",fmtP(o.alDia)]].forEach(([l,v],i)=>{
+function pdfEdoVend(o,msgEl,paraCli){const nomCli=o.clientes.length===1?o.clientes[0].nombre:"";
+  guardarArchivo((paraCli?"Estado de cuenta "+(nomCli||(o.clientes[0]?.nombre||"")+" y otras"):"Por cobrar "+o.v).replace(/[\\/:*?"<>|]/g,"-").trim()+" "+hoy(),J=>{
+    const s=pdfDoc(J,paraCli?"ESTADO DE CUENTA":"CUENTAS POR COBRAR",[paraCli?(nomCli?"Cliente: "+nomCli:o.clientes.length+" cuentas"):"Vendedor: "+o.v,"Fecha: "+fFecha(hoy())]);const d=s.d;
+    const bw=(s.X1-s.M-6)/3;[[paraCli?"Total pendiente":"Total por cobrar",fmtP(o.total)],["Vencido",fmtP(o.vencido)],["Al día",fmtP(o.alDia)]].forEach(([l,v],i)=>{
       const x=s.M+i*(bw+3);if(i===0){d.setFillColor(15,74,129);d.rect(x,s.y,bw,15,"F");d.setTextColor(255,255,255);}else{d.setDrawColor(180);d.rect(x,s.y,bw,15);if(i===1&&o.vencido>0)d.setTextColor(163,48,42);}
       d.setFont("helvetica","normal");d.setFontSize(8);d.text(l.toUpperCase(),x+3,s.y+5);d.setFont("helvetica","bold");d.setFontSize(12);d.text(v,x+3,s.y+11.5);d.setTextColor(0,0,0);});
     s.y+=22;
@@ -1756,39 +1756,53 @@ function pdfEdoVend(o,msgEl){
     const rows=[];
     for(const c of o.clientes){rows.push({v:[c.nombre+(c.rif?"  ·  "+fmtRif(c.rif):""),"","","",fmtP(c.saldo),c.vencido>0?"Vencido "+fmtP(c.vencido):"Al día"],b:true,fill:[240,244,249]});
       for(const f of c.notas)rows.push({v:["     Nota "+(f.numero||"—"),fFecha(f.fecha),f.ve?fFecha(f.ve):"—",fmtP(f.montoUSD),fmtP(f.saldo),f.dv>0?"Vencida hace "+f.dv+" días":"Al día"],color:f.dv>0?[163,48,42]:null});}
-    rows.push({v:["TOTAL ("+o.clientes.length+" clientes, "+o.notas+" notas)","","","",fmtP(o.total),""],b:true});
+    rows.push({v:["TOTAL ("+o.clientes.length+(o.clientes.length===1?" cliente, ":" clientes, ")+o.notas+(o.notas===1?" nota)":" notas)"),"","","",fmtP(o.total),""],b:true});
     pdfTabla(s,[{t:"CLIENTE / NOTA"},{t:"FECHA",w:20},{t:"VENCE",w:20},{t:"MONTO",w:24,a:"right"},{t:"SALDO",w:24,a:"right"},{t:"ESTADO",w:34}],rows);
     if(s.y+12>s.H-s.M){d.addPage();s.y=s.M;}
     d.setFont("helvetica","normal");d.setFontSize(8.5);d.setTextColor(90,90,90);
-    d.text(d.splitTextToSize("Clientes ordenados por la nota más atrasada. Cobra primero las vencidas y envía los comprobantes indicando el número de nota.",s.X1-s.M),s.M,s.y);d.setTextColor(0,0,0);
+    d.text(d.splitTextToSize(paraCli?"Agradecemos su pago, comenzando por las notas vencidas. Por favor envíe los comprobantes indicando el número de nota.":"Clientes ordenados por la nota más atrasada. Cobra primero las vencidas y envía los comprobantes indicando el número de nota.",s.X1-s.M),s.M,s.y);d.setTextColor(0,0,0);
     return d.output("blob");},msgEl);}
 function abrirEdoVend(vIni){
   if(!loadedF)return;
   const vends=[...new Set(saldos().filter(f=>f.saldo>0).map(f=>(f.vendedor||"").trim()||"Sin vendedor"))].sort((a,b)=>a.localeCompare(b,"es"));
   if(!vends.length){panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Estado por vendedor</h2></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div><div class="empty">No hay notas pendientes por cobrar.</div>`);return;}
-  let v=vends.includes(vIni)?vIni:vends[0];
+  let v=vends.includes(vIni)?vIni:vends[0],sel=null,paraCli=false,evQ="";
+  const datos=()=>edoVendDatos(v,sel);
   panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Estado por vendedor</h2><div class="note">Lo que cada vendedor tiene pendiente por cobrar, cliente por cliente. Mándaselo para que sepa a quién cobrar.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
     <label class="f">Vendedor<select id="evV">${vends.map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}</select></label>
+    <div class="chips" role="group" aria-label="Para quién es"><button type="button" id="evParaV" aria-pressed="true">Para el vendedor</button><button type="button" id="evParaC" aria-pressed="false">Para el cliente</button></div>
     <div id="evRes"></div>
     <div class="toolbar"><span class="spacer"></span><button type="button" id="evPdf">Descargar PDF</button><button type="button" class="wabtn" id="evWa">💬 Mandar por WhatsApp</button></div>
     <div id="evMsg" class="status" hidden></div>
     <div id="evWaBox" hidden></div>`);
   $(".panel").style.width="min(720px,100%)";
-  const pinta=()=>{const o=edoVendDatos(v);
+  const pinta=()=>{const todo=edoVendDatos(v),o=datos();const q=evQ.trim().toLowerCase();
+    const vis=todo.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||String(c.rif||"").toLowerCase().includes(q)||c.notas.some(f=>String(f.numero||"").includes(q)));
     $("#evRes").innerHTML=`<div class="summary" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:0"><div><span class="eyebrow">Por cobrar</span><span class="mid num">${fmt(o.total)}</span><span class="note">${o.clientes.length} cliente${o.clientes.length!==1?"s":""} · ${o.notas} nota${o.notas!==1?"s":""}</span></div>
       <div><span class="eyebrow">Vencido</span><span class="mid num"${o.vencido>0?' style="color:var(--bad)"':""}>${fmt(o.vencido)}</span></div><div><span class="eyebrow">Al día</span><span class="mid num">${fmt(o.alDia)}</span></div></div>
-      <div class="list" style="margin-top:10px">${o.clientes.map(c=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(c.nombre)}</div>
+      <div class="toolbar" style="margin-top:10px;gap:6px"><input id="evQ" type="search" placeholder="Buscar cliente o nota" value="${esc(evQ)}" style="flex:1;min-width:10rem"><button type="button" id="evTodos">Marcar todos</button><button type="button" id="evNinguno">Quitar todos</button></div>
+      <div class="note" style="margin-top:6px">Tilda los clientes que quieres que salgan en el PDF y en el mensaje${sel?` · <b>${o.clientes.length} de ${todo.clientes.length} marcados</b>`:" · todos marcados"}.</div>
+      <div class="list" style="margin-top:6px">${vis.map(c=>{const on=!sel||sel.has(c.k);return `<label class="row" style="grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer;align-items:start${on?"":";opacity:.45"}"><input type="checkbox" data-evk="${esc(c.k)}"${on?" checked":""} style="width:1.15rem;height:1.15rem;margin-top:2px" aria-label="Incluir ${esc(c.nombre)}"><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(c.nombre)}</div>
         <div class="sub">${c.notas.map(f=>`Nota ${esc(f.numero||"—")}: ${fmt(f.saldo)}${f.dv>0?` <b style="color:var(--bad)">vencida hace ${f.dv} día${f.dv>1?"s":""}</b>`:f.ve?` · vence ${fFecha(f.ve)}`:""}`).join("<br>")}</div></span>
-        <span class="r num" style="font-weight:600${c.vencido>0?";color:var(--bad)":""}">${fmt(c.saldo)}</span></div>`).join("")}</div>`;
+        <span class="r num" style="font-weight:600${c.vencido>0?";color:var(--bad)":""}">${fmt(c.saldo)}</span></label>`;}).join("")||'<div class="empty">Ningún cliente coincide.</div>'}</div>`;
+    const todasK=()=>new Set(todo.clientes.map(c=>c.k));
+    document.querySelectorAll("[data-evk]").forEach(cb=>cb.onchange=()=>{const s2=sel?new Set(sel):todasK();cb.checked?s2.add(cb.dataset.evk):s2.delete(cb.dataset.evk);sel=s2.size===todo.clientes.length?null:s2;pinta();});
+    $("#evTodos").onclick=()=>{sel=null;pinta();};
+    $("#evNinguno").onclick=()=>{sel=new Set();pinta();};
+    $("#evQ").oninput=e=>{evQ=e.target.value;const pos=e.target.selectionStart;pinta();const i=$("#evQ");i.focus();try{i.setSelectionRange(pos,pos);}catch(x){}};
     $("#evWaBox").hidden=true;$("#evMsg").hidden=true;return o;};
   pinta();
-  $("#evV").onchange=e=>{v=e.target.value;pinta();};
-  $("#evPdf").onclick=()=>pdfEdoVend(edoVendDatos(v),$("#evMsg"));
-  $("#evWa").onclick=()=>{const box=$("#evWaBox");if(!box.hidden){box.hidden=true;return;}
-    box.hidden=false;box.innerHTML=`<div class="grid2"><label class="f">Teléfono del vendedor<input id="evTel" inputmode="tel" autocomplete="off" placeholder="0414-1234567"></label><div class="note" style="align-self:end">Si lo dejas vacío, WhatsApp te deja elegir el contacto.</div></div>
-      <label class="f" style="margin-top:8px">Mensaje (puedes cambiarlo)<textarea class="waText" id="evTxt">${esc(edoVendTexto(edoVendDatos(v)))}</textarea></label>
+  $("#evV").onchange=e=>{v=e.target.value;sel=null;evQ="";pinta();};
+  const para=c=>{paraCli=c;$("#evParaV").setAttribute("aria-pressed",!c);$("#evParaC").setAttribute("aria-pressed",c);const l=$("#evTelL");if(l)l.textContent=c?"Teléfono del cliente":"Teléfono del vendedor";$("#evWaBox").hidden=true;};
+  $("#evParaV").onclick=()=>para(false);$("#evParaC").onclick=()=>para(true);
+  const vacio=()=>{if(datos().clientes.length)return false;const m=$("#evMsg");m.hidden=false;m.className="status err";m.textContent="Marca al menos un cliente.";return true;};
+  $("#evPdf").onclick=()=>{if(!vacio())pdfEdoVend(datos(),$("#evMsg"),paraCli);};
+  $("#evWa").onclick=()=>{const box=$("#evWaBox");if(!box.hidden){box.hidden=true;return;}if(vacio())return;
+    box.hidden=false;box.innerHTML=`<div class="grid2"><label class="f"><span id="evTelL">${paraCli?"Teléfono del cliente":"Teléfono del vendedor"}</span><input id="evTel" inputmode="tel" autocomplete="off" placeholder="0414-1234567"></label><div class="note" style="align-self:end">Si lo dejas vacío, WhatsApp te deja elegir el contacto.</div></div>
+      <label class="f" style="margin-top:8px">Mensaje (puedes cambiarlo)<textarea class="waText" id="evTxt">${esc(edoVendTexto(datos(),paraCli))}</textarea></label>
       <div class="toolbar" style="margin-top:8px"><span class="spacer"></span><button type="button" id="evCopy">Copiar mensaje</button><a class="wabtn" id="evGo" target="_blank" rel="noopener">💬 Abrir en WhatsApp</a></div><div id="evWaMsg" class="status" hidden></div>`;
-    const k="db18.telVend."+v;try{$("#evTel").value=localStorage.getItem(k)||"";}catch(e){}
+    const k=paraCli?"db18.telCliSel."+[...(sel||[])].sort().join(","):"db18.telVend."+v;try{$("#evTel").value=localStorage.getItem(k)||"";}catch(e){}
+    if(paraCli&&!$("#evTel").value){for(const c of datos().clientes){const cl=c.rif?clientes.find(x=>normRif(x.rif)===normRif(c.rif)):null;if(cl?.telefonos){$("#evTel").value=String(cl.telefonos).split(/[\/,;]/)[0].trim();break;}}}
     const upd=()=>{const t=telLimpio($("#evTel").value);try{localStorage.setItem(k,$("#evTel").value.trim());}catch(e){}$("#evGo").href=(t?"https://wa.me/"+t:"https://wa.me/")+"?text="+encodeURIComponent($("#evTxt").value);};
     $("#evTel").oninput=upd;$("#evTxt").oninput=upd;upd();
     $("#evCopy").onclick=async()=>{const m=$("#evWaMsg");m.hidden=false;try{await navigator.clipboard.writeText($("#evTxt").value);m.className="status ok";m.textContent="✓ Mensaje copiado. Pégalo en el chat del vendedor.";}catch(e){$("#evTxt").select();m.className="status";m.textContent="Selecciona el texto y cópialo con Ctrl+C.";}};
