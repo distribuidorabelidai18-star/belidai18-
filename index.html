@@ -1191,7 +1191,7 @@ function calcCuadre(docs){
     const dif=r2(f.saldo-saldoP);if(Math.abs(dif)<0.01)continue;
     const nuevoPP=r2((Number(f.montoUSD)||0)-saldoP-(pagAb[f.id]||0));
     out.push({f,d,saldoP,dif,nuevoPP,ok:nuevoPP>=-0.005,
-      motivo:!d?"En Profit ya está pagada (no sale en el reporte de Sin cancelar)":dif>0?"En Profit tiene abonos que aquí no están":"Aquí tiene más abonos que en Profit"});}
+      motivo:!d?"En Profit ya está pagada (no sale en el reporte de Sin cancelar)":dif>0?"En Profit tiene abonos que aquí no están":"Aquí tiene más abonos que en Profit · revísala antes de ajustar: puede ser un pago que solo está aquí"});}
   return out.sort((a,b)=>(a.f.cliente||"").localeCompare(b.f.cliente||"","es")||String(a.f.numero).localeCompare(String(b.f.numero)));}
 function pintarCuadre(docs){
   const el=$("#pCuadre");if(!el)return;cuadreFilas=calcCuadre(docs);
@@ -1203,7 +1203,7 @@ function pintarCuadre(docs){
   el.innerHTML=`<div class="card"><h3 style="margin:0;font-size:1.05rem">Cuadre con Profit</h3>
     <div class="note">Notas que ya estaban aquí y cuyo saldo no coincide con este reporte de Profit. Al ajustar, el saldo queda igual que en Profit. No se registra como cobranza de este mes.</div>
     <div class="tw"><table class="mov"><thead><tr><th></th><th>N°</th><th>Cliente</th><th class="r">Saldo aquí</th><th class="r">Saldo Profit</th><th>Qué pasa</th></tr></thead><tbody>
-    ${cuadreFilas.map((x,i)=>`<tr><td><input type="checkbox" data-cq="${i}" ${x.ok?"checked":"disabled"} aria-label="Ajustar nota ${esc(x.f.numero)}"></td><td class="mono">${esc(x.f.numero)}</td><td>${esc(x.f.cliente)}</td><td class="r">${fmt(x.f.saldo)}</td><td class="r">${fmt(x.saldoP)}</td><td style="white-space:normal">${esc(x.motivo)}${x.ok?"":` · <b style="color:var(--bad)">revísala a mano: los abonos de aquí suman más que lo que dice Profit</b>`}</td></tr>`).join("")}
+    ${cuadreFilas.map((x,i)=>`<tr><td><input type="checkbox" data-cq="${i}" ${x.ok?(x.dif>0?"checked":""):"disabled"} aria-label="Ajustar nota ${esc(x.f.numero)}"></td><td class="mono">${esc(x.f.numero)}</td><td>${esc(x.f.cliente)}</td><td class="r">${fmt(x.f.saldo)}</td><td class="r">${fmt(x.saldoP)}</td><td style="white-space:normal">${esc(x.motivo)}${x.ok?"":` · <b style="color:var(--bad)">revísala a mano: los abonos de aquí suman más que lo que dice Profit</b>`}</td></tr>`).join("")}
     </tbody></table></div>
     <div class="toolbar"><span class="note" id="cqCuenta"></span><span class="spacer"></span><button type="button" id="cqCopy">Copiar lista</button><button class="primary" type="button" id="cqGo">Ajustar</button></div><div id="cqMsg"></div></div>`;
   $("#cqCopy").onclick=async()=>{const t=["CUADRE CON PROFIT","N° | Cliente | Saldo aquí | Saldo Profit | Qué pasa",...cuadreFilas.map(x=>`${x.f.numero} | ${x.f.cliente} | ${fmt(x.f.saldo)} | ${fmt(x.saldoP)} | ${x.motivo}${x.ok?"":" (no se puede ajustar sola)"}`)].join("\n");
