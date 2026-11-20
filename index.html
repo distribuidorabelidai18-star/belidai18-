@@ -1146,6 +1146,7 @@ function abrirProfit(){
   <div class="note">En Profit, saca el reporte <b>Documentos de CXC por vendedor</b> con condición <b>Sin cancelar</b> y moneda en dólares, y expórtalo a Excel. Se agregan las notas que falten y te muestra las que ya estaban aquí con un saldo distinto al de Profit, para cuadrarlas.</div>
   <label class="drop" id="pDrop" for="pFile"><strong>Toca para elegir el Excel de Profit</strong><span>o arrástralo aquí (.xlsx o .xls)</span><input id="pFile" type="file" accept=".xlsx,.xls,.csv" hidden></label>
   <div id="pRes"></div>`);
+  $(".panel").style.width="min(980px,100%)";
   const f=$("#pFile"),d=$("#pDrop");
   f.onchange=()=>f.files[0]&&leerProfit(f.files[0]);
   d.ondragover=e=>{e.preventDefault();d.classList.add("over")};d.ondragleave=()=>d.classList.remove("over");
@@ -1204,7 +1205,9 @@ function pintarCuadre(docs){
     <div class="tw"><table class="mov"><thead><tr><th></th><th>N°</th><th>Cliente</th><th class="r">Saldo aquí</th><th class="r">Saldo Profit</th><th>Qué pasa</th></tr></thead><tbody>
     ${cuadreFilas.map((x,i)=>`<tr><td><input type="checkbox" data-cq="${i}" ${x.ok?"checked":"disabled"} aria-label="Ajustar nota ${esc(x.f.numero)}"></td><td class="mono">${esc(x.f.numero)}</td><td>${esc(x.f.cliente)}</td><td class="r">${fmt(x.f.saldo)}</td><td class="r">${fmt(x.saldoP)}</td><td style="white-space:normal">${esc(x.motivo)}${x.ok?"":` · <b style="color:var(--bad)">revísala a mano: los abonos de aquí suman más que lo que dice Profit</b>`}</td></tr>`).join("")}
     </tbody></table></div>
-    <div class="toolbar"><span class="note" id="cqCuenta"></span><span class="spacer"></span><button class="primary" type="button" id="cqGo">Ajustar</button></div><div id="cqMsg"></div></div>`;
+    <div class="toolbar"><span class="note" id="cqCuenta"></span><span class="spacer"></span><button type="button" id="cqCopy">Copiar lista</button><button class="primary" type="button" id="cqGo">Ajustar</button></div><div id="cqMsg"></div></div>`;
+  $("#cqCopy").onclick=async()=>{const t=["CUADRE CON PROFIT","N° | Cliente | Saldo aquí | Saldo Profit | Qué pasa",...cuadreFilas.map(x=>`${x.f.numero} | ${x.f.cliente} | ${fmt(x.f.saldo)} | ${fmt(x.saldoP)} | ${x.motivo}${x.ok?"":" (no se puede ajustar sola)"}`)].join("\n");
+    try{await navigator.clipboard.writeText(t);$("#cqCopy").textContent="✓ Copiada";}catch(e){$("#cqMsg").innerHTML=`<textarea readonly style="width:100%;height:160px">${esc(t)}</textarea>`;}};
   const cuenta=()=>{const n=el.querySelectorAll("[data-cq]:checked").length;$("#cqCuenta").textContent=`${n} de ${cuadreFilas.length} marcadas`;$("#cqGo").textContent=`Ajustar ${n} nota${n!==1?"s":""}`;$("#cqGo").disabled=!n;};
   el.querySelectorAll("[data-cq]").forEach(c=>c.onchange=cuenta);cuenta();
   $("#cqGo").onclick=async()=>{const b=$("#cqGo"),m=$("#cqMsg");b.disabled=true;let ok=0;
