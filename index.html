@@ -1667,8 +1667,21 @@ function renderEmpDet(first){
 
 
 /* ---------- PDF: utilidades comunes ---------- */
+/* Antes de guardar cualquier PDF se pregunta el nombre del archivo (viene escrito uno; se puede cambiar). */
+function pedirNombre(def){return new Promise(res=>{const w=document.createElement("div");
+  w.style.cssText="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.45);display:grid;place-items:center;padding:16px";
+  w.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="pnT" style="background:var(--surface,#fff);border-radius:14px;padding:18px;width:min(460px,100%);display:grid;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <b id="pnT" style="font-size:1.05rem">Nombre del archivo</b>
+    <div style="display:flex;align-items:center;gap:6px"><input id="pnIn" style="flex:1" aria-label="Nombre del archivo"><span class="note">.pdf</span></div>
+    <div class="toolbar"><span class="spacer"></span><button type="button" id="pnNo">Cancelar</button><button type="button" class="primary" id="pnOk">Guardar</button></div></div>`;
+  document.body.appendChild(w);const i=w.querySelector("#pnIn");i.value=def;i.focus();i.select();
+  const fin=v=>{w.remove();document.removeEventListener("keydown",k,true);res(v);};
+  const ok=()=>{const v=i.value.replace(/\.pdf$/i,"").replace(/[\\/:*?"<>|]/g,"-").trim();fin(v||def);};
+  const k=e=>{if(e.key==="Escape"){e.stopPropagation();fin(null);}else if(e.key==="Enter"&&document.activeElement===i){e.preventDefault();ok();}};
+  document.addEventListener("keydown",k,true);w.querySelector("#pnOk").onclick=ok;w.querySelector("#pnNo").onclick=()=>fin(null);w.onclick=e=>{if(e.target===w)fin(null);};});}
 async function guardarArchivo(nombre,mk,msgEl,htmlFallback){
   const say=(t,c)=>{if(msgEl){msgEl.hidden=false;msgEl.className="status "+(c||"");msgEl.innerHTML=t;}};
+  const elegido=await pedirNombre(String(nombre||"documento"));if(elegido===null)return;nombre=elegido;
   const dl=await window.claude?.use?.("downloads").catch(()=>null);
   if(!dl)return say("La descarga no está disponible.","err");
   say('<span class="spin"></span><span>Preparando el PDF…</span>');
