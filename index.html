@@ -1159,6 +1159,10 @@ async function leerProfit(file){
     const rows=X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:null});
     const docs=parseProfit(rows);
     const ya=new Set(facturas.map(x=>String(x.numero||"").trim()));
+    // mismo número pero otro cliente: casi siempre una nota cargada aquí con el número equivocado
+    const mismoCli=(f,d)=>{const a=normRif(f.rif),b=normRif(d.rif);if(a&&b&&a===b)return true;const na=kName(f.cliente).replace(/[^a-z0-9]/g,""),nb=kName(d.cliente).replace(/[^a-z0-9]/g,"");return na===nb||na.includes(nb)||nb.includes(na);};
+    const choques=docs.map(d=>({d,f:facturas.find(x=>String(x.numero||"").trim()===d.numero)})).filter(x=>x.f&&!mismoCli(x.f,x.d));
+    window._choques=new Set(choques.map(x=>x.d.numero));
     impNuevas=docs.filter(x=>!ya.has(x.numero));const repetidas=docs.length-impNuevas.length;
     const tot=r2(impNuevas.reduce((s,x)=>s+x.saldo,0));const nCli=new Set(impNuevas.map(x=>x.rif||kName(x.cliente))).size;
     const otros=impNuevas.filter(x=>x.tipo&&!/factura|nota de entrega/i.test(x.tipo)).length;
@@ -1169,7 +1173,13 @@ async function leerProfit(file){
       ${impNuevas.length?`<div class="tw"><table class="mov"><thead><tr><th>N°</th><th>Cliente</th><th>Vendedor</th><th class="r">Neto</th><th class="r">Saldo</th></tr></thead><tbody>${impNuevas.slice(0,8).map(x=>`<tr><td class="mono">${esc(x.numero)}</td><td>${esc(x.cliente)}</td><td>${esc(x.vendedor)}</td><td class="r">${fmt(x.neto)}</td><td class="r">${fmt(x.saldo)}</td></tr>`).join("")}</tbody></table></div>${impNuevas.length>8?`<div class="note">y ${impNuevas.length-8} más.</div>`:""}
       <div class="note">Si una nota ya tiene abonos en Profit, se guarda con ese abono y solo queda el saldo pendiente.</div>
       <button class="primary" type="button" id="pGo">Importar ${impNuevas.length} nota${impNuevas.length>1?"s":""}</button>`:`<div class="status ok">✓ Todas las notas del archivo ya están cargadas.</div>`}
-      <div id="pProg"></div></div><div id="pCuadre"></div>`;
+      <div id="pProg"></div></div>
+      ${choques.length?`<div class="card" style="border-color:var(--bad)"><h3 style="margin:0;font-size:1.05rem;color:var(--bad)">⚠️ Mismo número, cliente distinto (${choques.length})</h3>
+        <div class="note">Estas notas ya existen aquí con el mismo número pero de <b>otro cliente</b>. Seguramente la de aquí se cargó con el número equivocado. No se importan ni se cuadran: abre la nota de aquí, toca <b>Cambiar número de nota</b> y pon el número correcto; después vuelve a subir este archivo.</div>
+        <div class="tw"><table class="mov"><thead><tr><th>N°</th><th>Aquí es de</th><th class="r">Monto aquí</th><th>En Profit es de</th><th class="r">Neto Profit</th><th></th></tr></thead><tbody>
+        ${choques.map(x=>`<tr><td class="mono">${esc(x.d.numero)}</td><td>${esc(x.f.cliente)}</td><td class="r">${fmt(x.f.montoUSD)}</td><td>${esc(x.d.cliente)}</td><td class="r">${fmt(x.d.neto)}</td><td><button type="button" data-chq="${esc(x.f.id)}">Abrir</button></td></tr>`).join("")}</tbody></table></div></div>`:""}
+      <div id="pCuadre"></div>`;
+    res.querySelectorAll("[data-chq]").forEach(b=>b.onclick=()=>abrirDetalle(b.dataset.chq));
     $("#pGo")?.addEventListener("click",importarProfit);
     pintarCuadre(docs);
   }catch(e){res.innerHTML=`<div class="err">${esc(e?.message||"No se pudo leer el archivo. Asegúrate de que sea el Excel exportado de Profit.")}</div>`;}
@@ -1184,7 +1194,7 @@ function calcCuadre(docs){
   for(const c of notasCred)pagAb[c.facturaId]=r2((pagAb[c.facturaId]||0)+(Number(c.montoUSD)||0)); // las notas de crédito también bajan el saldo
   const out=[];
   for(const f of saldos()){
-    const num=String(f.numero||"").trim();if(!num)continue;const d=pf[num];
+    const num=String(f.numero||"").trim();if(!num)continue;if(window._choques?.has(num))continue;const d=pf[num];
     let saldoP;
     if(d)saldoP=r2(d.saldo);
     else{ if(!(f.saldo>0.009))continue; if((f.fecha||"")>ultima)continue; saldoP=0; }
@@ -1221,7 +1231,7 @@ async function importarProfit(){
   const btn=$("#pGo"),prog=$("#pProg");btn.disabled=true;let ok=0;const now=Date.now();
   for(const x of impNuevas){
     prog.innerHTML=`<div class="status"><span class="spin"></span><span>Importando ${ok+1} de ${impNuevas.length}…</span></div>`;
-    const id="p"+x.numero.replace(/[^A-Za-z0-9_\-]/g,"");
+    const id="p"+x.numero.replace(/[^A-Za-z0-9_\-]/g,"");if(facturas.some(f=>f.id===id)){ok++;continue;}
     const doc={cliente:x.cliente||"Sin nombre",rif:x.rif,vendedor:x.vendedor,numero:x.numero,fecha:x.fecha||hoy(),vencimiento:x.vencimiento,moneda:"USD",montoOriginal:x.neto,tasa:null,montoUSD:x.neto,
       pagadoPrevio:r2(x.neto-x.saldo)>0?r2(x.neto-x.saldo):0,origen:"profit",tipo:x.tipo,imagen:"",creado:now+ok};
     try{await db.doc("facturas/"+id).set(doc);ok++;}
@@ -1338,7 +1348,7 @@ function renderDetalle(first){
       ${canWrite&&esDueno?`<button class="danger" type="button" data-del="${esc(a.id)}" aria-label="Borrar abono">Borrar</button>`:"<span></span>"}</div>`}).join("")}</div>`:'<div class="note">Todavía no hay abonos en esta nota.</div>'}
     <div id="confAb"></div>
   </div>
-  ${canWrite&&esDueno?`<div><button class="danger" type="button" id="delF">Borrar esta nota y sus abonos</button><div id="confF"></div></div>`:""}`);
+  ${canWrite&&esDueno?`<div class="toolbar" style="margin:0"><button type="button" id="numF">Cambiar número de nota</button><button class="danger" type="button" id="delF">Borrar esta nota y sus abonos</button></div><div id="numBox"></div><div id="confF"></div>`:""}`);
   if(keep){if(keep.m!=null&&$("#aMonto"))$("#aMonto").value=keep.m;if(keep.t!=null&&$("#aTasa"))$("#aTasa").value=keep.t;if(keep.r!=null&&$("#aRef"))$("#aRef").value=keep.r;if(keep.d&&$("#aFecha"))$("#aFecha").value=keep.d;if(keep.s)$(".panel").scrollTop=keep.s;}
   if($("#aFecha")&&!$("#aFecha").value)$("#aFecha").value=hoy();
   $("#thumb")?.addEventListener("click",e=>verImagen(e.target.src));
@@ -1362,6 +1372,25 @@ function renderDetalle(first){
     $("#cNo").onclick=()=>$("#confAb").innerHTML="";
     $("#cSi").onclick=async()=>{try{await db.doc("abonos/"+b.dataset.del).delete();}catch(e){$("#confAb").innerHTML='<div class="err">No se pudo borrar. Intenta de nuevo.</div>';}};
   });
+  $("#numF")&&($("#numF").onclick=()=>{const b=$("#numBox");if(b.innerHTML){b.innerHTML="";return;}
+    b.innerHTML=`<div class="card" style="display:grid;gap:8px"><b>Cambiar el número de la nota ${esc(f.numero||"")}</b><div class="note">Úsalo si se cargó con un número equivocado. Los abonos y notas de crédito pasan con ella.</div>
+      <div class="toolbar" style="margin:0"><input id="numNuevo" inputmode="numeric" placeholder="Número correcto" style="flex:1"><button class="primary" type="button" id="numGo">Cambiar</button></div><div id="numErr" class="err" hidden></div></div>`;
+    $("#numNuevo").focus();
+    $("#numGo").onclick=async()=>{const e=$("#numErr"),fail=t=>{e.textContent=t;e.hidden=false;};e.hidden=true;
+      const nuevo=$("#numNuevo").value.trim().replace(/\.0+$/,"");if(!nuevo||!/\d/.test(nuevo))return fail("Escribe el número correcto.");
+      if(nuevo===String(f.numero||""))return fail("Es el mismo número.");
+      const otra=facturas.find(x=>x.id!==f.id&&String(x.numero||"").trim()===nuevo);if(otra)return fail(`Ya hay otra nota con el número ${nuevo} (${otra.cliente}).`);
+      const nid="p"+nuevo.replace(/[^A-Za-z0-9_\-]/g,"");if(facturas.some(x=>x.id===nid))return fail("Ya existe una nota con ese número.");
+      const bt=$("#numGo");bt.disabled=true;bt.textContent="Cambiando…";
+      try{const d={...f};for(const k of ["id","saldo","abonado","estado","ve","dv","ult"])delete d[k];
+        const base=facturas.find(x=>x.id===f.id)||{};const doc={...base,numero:nuevo};delete doc.id;
+        await db.doc("facturas/"+nid).set(doc);
+        for(const a of abonos.filter(a=>a.facturaId===f.id))await db.doc("abonos/"+a.id).update({facturaId:nid});
+        for(const c of notasCred.filter(c=>c.facturaId===f.id))await db.doc("notasCredito/"+c.id).update({facturaId:nid,notaNumero:nuevo});
+        for(const p of pagosVend.filter(p=>p.facturaId===f.id))await db.doc("pagosVend/"+p.id).update({facturaId:nid,numero:nuevo});
+        await db.doc("facturas/"+f.id).delete();
+        msgAbono=`Número cambiado: ${f.numero||"—"} → ${nuevo}.`;detId=nid;setTimeout(()=>{if(facturas.some(x=>x.id===nid))abrirDetalleMsg(nid);},300);}
+      catch(x){console.error(x);bt.disabled=false;bt.textContent="Cambiar";fail("No se pudo cambiar. Revisa tu conexión e intenta de nuevo.");}};});
   $("#delF")&&($("#delF").onclick=()=>{
     $("#confF").innerHTML=`<div class="confirm">Se borrará la nota de ${esc(f.cliente)} y sus ${mis.length} abono${mis.length===1?"":"s"}. No se puede deshacer.<span class="spacer"></span><button type="button" id="fNo">Cancelar</button><button class="primary" type="button" id="fSi" style="background:var(--bad);border-color:var(--bad)">Borrar nota</button></div>`;
     $("#fNo").onclick=()=>$("#confF").innerHTML="";
