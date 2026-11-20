@@ -48,6 +48,8 @@ button:disabled{opacity:.5;cursor:default}
 .qty button{width:40px;height:40px;padding:0;font-size:1.2rem;line-height:1}
 .qty input{width:84px;text-align:center;font-family:var(--f-mono);padding:8px 6px}
 .warn{color:var(--warn);font-size:.8rem;font-weight:500}
+.tag.of{background:#c2410c;color:#fff}.p.of{border-color:#f0b48a}.precio.of{color:#c2410c}.ofn{font-size:.78rem;color:#c2410c;font-weight:600}
+.ofban{display:flex;gap:10px;align-items:center;background:#fff4ec;border:1px solid #f0b48a;border-radius:12px;padding:10px 12px;color:#7c2d12;font-weight:600;cursor:pointer;width:100%;text-align:left}
 .p.ago{opacity:.55}.p.ago img{filter:grayscale(1)}
 .tag{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;border-radius:999px;padding:2px 9px}
 .tag.ok{background:#e0f2e8;color:#1d7a4f}.tag.no{background:#f8e1df;color:#a3302a}
@@ -124,13 +126,20 @@ const MODO_CLI=new URLSearchParams(location.search).has("cliente");
 const LS=MODO_CLI?"db18.pedidoCli":"db18.pedidoVend";
 const fBs=n=>"Bs "+r2(n).toLocaleString("es-VE",{minimumFractionDigits:2,maximumFractionDigits:2});
 let tasa=null;const bsDe=n=>tasa?fBs(n*tasa.tasa):"";
-let prods=[],marca="TODAS",vista="cat";
+let prods=[],marca=new URLSearchParams(location.search).has("ofertas")?"__OF":"TODAS",vista="cat";
+const hoyISO=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+// Oferta vigente del producto (precio final). Se aplica si lleva el mínimo y no pasa de las unidades que quedan.
+function ofAct(p){const o=p&&p.o;if(!o||!(o.p>0))return null;const h=hoyISO();if(o.d&&h<o.d)return null;if(o.h&&h>o.h)return null;if(o.r!=null&&o.r<=0)return null;return o;}
+function enOferta(p,n){const o=ofAct(p);return !!(o&&n>=o.n&&(o.r==null||n<=o.r));}
+function pu(p,n){return enOferta(p,n)?ofAct(p).p:p.p;}
+function avisoOf(p,n){const o=ofAct(p);if(!o||!(n>0))return "";if(n<o.n)return `🔥 Llevando ${o.n} o más: ${fmt(o.p)} c/u`;if(o.r!=null&&n>o.r)return `Solo quedan ${o.r} a precio de oferta`;return "🔥 Precio de oferta aplicado";}
 let st={vend:"",cli:"",nota:"",items:{}};
 try{st={...st,...JSON.parse(localStorage.getItem(LS)||"{}")};}catch(e){}
 const guardar=()=>{try{localStorage.setItem(LS,JSON.stringify(st));}catch(e){}};
 
 function paso(p){return Number(p.q)>0?Number(p.q):1;}
-function avisoQty(p,n){const q=Number(p.q);if(!(n>0)||!(q>1))return "";
+function avisoQty(p,n){const of=avisoOf(p,n),b=avisoQty0(p,n);return [b,of].filter(Boolean).join(" · ");}
+function avisoQty0(p,n){const q=Number(p.q);if(!(n>0)||!(q>1))return "";
   if(n<q)return `Menos de una caja (la caja trae ${q})`;
   if(n%q)return `No completa cajas: la caja trae ${q}`;return "";}
 
@@ -138,32 +147,38 @@ function setQty(c,n){n=Math.max(0,Math.floor(Number(n)||0));if(n)st.items[c]=n;e
   const el=document.querySelector(`.p[data-c="${CSS.escape(c)}"]`);if(el){const p=prods.find(x=>x.c===c);el.classList.toggle("sel",n>0);const i=el.querySelector("input");if(document.activeElement!==i)i.value=n||"";const w=el.querySelector(".warn");w.textContent=avisoQty(p,n);}
   if(vista==="res")pintarRes();}
 
-function pintarMarcas(){const ms=["TODAS",...new Set(prods.map(p=>p.m))];
-  $("#marcas").innerHTML=ms.map(m=>`<button type="button" data-m="${esc(m)}" aria-pressed="${m===marca}">${m==="TODAS"?"Todas":esc(m)}</button>`).join("");
+function pintarMarcas(){const nOf=prods.filter(p=>!p.a&&ofAct(p)).length;if(marca==="__OF"&&!nOf)marca="TODAS";const ms=[...(nOf?["__OF"]:[]),"TODAS",...new Set(prods.map(p=>p.m))];
+  $("#marcas").innerHTML=ms.map(m=>`<button type="button" data-m="${esc(m)}" aria-pressed="${m===marca}">${m==="TODAS"?"Todas":m==="__OF"?`🔥 Ofertas (${nOf})`:esc(m)}</button>`).join("");
   $("#marcas").querySelectorAll("button").forEach(b=>b.onclick=()=>{marca=b.dataset.m;pintarMarcas();pintarProds();});}
 
 function pintarProds(){const q=$("#q").value.trim().toLowerCase();
-  const lista=prods.filter(p=>(marca==="TODAS"||p.m===marca)&&(!q||[p.r,p.d,p.c].some(v=>String(v||"").toLowerCase().includes(q))));
+  const lista=prods.filter(p=>(marca==="TODAS"||(marca==="__OF"?(!p.a&&ofAct(p)):p.m===marca))&&(!q||[p.r,p.d,p.c].some(v=>String(v||"").toLowerCase().includes(q))));
   if(!lista.length){$("#prods").innerHTML=`<div class="empty">No hay productos que coincidan con la búsqueda.</div>`;return;}
-  let html="",ult="";
-  for(const p of lista){if(p.m!==ult&&marca==="TODAS"&&!q){html+=`<div class="marca">${esc(p.m)}</div>`;ult=p.m;}
+  let html="",ult="";const nOf=prods.filter(p=>!p.a&&ofAct(p)).length;
+  if(nOf&&marca==="TODAS"&&!q)html+=`<button type="button" class="ofban" id="verOf"><span style="font-size:1.4rem">🔥</span><span>${nOf} producto${nOf>1?"s":""} en oferta. Toca para verlos</span></button>`;
+  if(marca==="__OF")html+=`<div class="note" style="padding:0 2px">Los precios de oferta son finales: no llevan descuento adicional por forma de pago.</div>`;
+  for(const p of lista){if(p.m!==ult&&marca!=="__OF"&&marca==="TODAS"&&!q){html+=`<div class="marca">${esc(p.m)}</div>`;ult=p.m;}
     const n=st.items[p.c]||0;
     if(p.a){html+=`<div class="p ago">${p.f?`<img src="${esc(BASE+p.f)}" alt="" loading="lazy">`:`<div class="ni">Sin foto</div>`}
       <div style="min-width:0"><div class="ref">${esc(p.r)}</div><div class="desc">${esc(p.d)}</div>
         <div class="meta"><span class="precio">${fmt(p.p)}</span><span class="tag no">AGOTADO</span></div></div></div>`;continue;}
-    html+=`<div class="p${n?" sel":""}" data-c="${esc(p.c)}">${p.f?`<img src="${esc(BASE+p.f)}" alt="" loading="lazy">`:`<div class="ni">Sin foto</div>`}
+    const of=ofAct(p);
+    html+=`<div class="p${n?" sel":""}${of?" of":""}" data-c="${esc(p.c)}">${p.f?`<img src="${esc(BASE+p.f)}" alt="" loading="lazy">`:`<div class="ni">Sin foto</div>`}
       <div style="min-width:0"><div class="ref">${esc(p.r)}</div><div class="desc">${esc(p.d)}</div>
-        <div class="meta"><span class="precio">${fmt(p.p)}</span>${tasa?`<span class="note num">${bsDe(p.p)}</span>`:""}<span class="note">por ${esc(p.u||"pieza")}${Number(p.q)>0?` · caja de ${p.q}`:""}</span><span class="tag ok">DISPONIBLE</span></div>
+        ${of?`<div class="meta"><span class="tag of">🔥 OFERTA</span><s class="note num">${fmt(p.p)}</s><span class="precio of">${fmt(of.p)}</span>${tasa?`<span class="note num">${bsDe(of.p)}</span>`:""}<span class="tag ok">DISPONIBLE</span></div>
+          <div class="ofn">${of.n>1?`Llevando ${of.n} piezas o más`:"Precio final"}${of.r!=null?` · quedan ${of.r} a este precio`:""}${of.h?` · hasta el ${of.h.split("-").reverse().join("/")}`:""}</div>
+          <div class="note">Precio normal por ${esc(p.u||"pieza")}${Number(p.q)>0?` · caja de ${p.q}`:""}</div>`
+        :`<div class="meta"><span class="precio">${fmt(p.p)}</span>${tasa?`<span class="note num">${bsDe(p.p)}</span>`:""}<span class="note">por ${esc(p.u||"pieza")}${Number(p.q)>0?` · caja de ${p.q}`:""}</span><span class="tag ok">DISPONIBLE</span></div>`}
         <div class="qty"><button type="button" data-d="-1" aria-label="Quitar">−</button><input inputmode="numeric" aria-label="Cantidad de ${esc(p.r)}" value="${n||""}" placeholder="0"><button type="button" data-d="1" aria-label="Agregar">+</button></div>
         <div class="warn">${avisoQty(p,n)}</div></div></div>`;}
-  $("#prods").innerHTML=html;
+  $("#prods").innerHTML=html;$("#verOf")&&($("#verOf").onclick=()=>{marca="__OF";pintarMarcas();pintarProds();window.scrollTo({top:$("#marcas").getBoundingClientRect().top+scrollY-80});});
   $("#prods").querySelectorAll(".p[data-c]").forEach(el=>{const c=el.dataset.c,p=prods.find(x=>x.c===c),i=el.querySelector("input");
     el.querySelectorAll("button[data-d]").forEach(b=>b.onclick=()=>{const cur=st.items[c]||0,s=paso(p);let n;
       if(b.dataset.d==="1")n=cur<s?s:Math.floor(cur/s)*s+s;else n=cur%s?Math.floor(cur/s)*s:cur-s;setQty(c,Math.max(0,n));i.value=st.items[c]||"";});
     i.oninput=()=>setQty(c,i.value.replace(/\D/g,""));});}
 
 function items(){return Object.entries(st.items).map(([c,n])=>({p:prods.find(x=>x.c===c),n})).filter(x=>x.p&&!x.p.a&&x.n>0);}
-function total(){return r2(items().reduce((s,x)=>s+x.p.p*x.n,0));}
+function total(){return r2(items().reduce((s,x)=>s+pu(x.p,x.n)*x.n,0));}
 function pintarBar(){const it=items(),pz=it.reduce((s,x)=>s+x.n,0);
   $("#bar").classList.toggle("hidden",!it.length&&vista==="cat");
   $("#barN").textContent=it.length?`${it.length} producto${it.length>1?"s":""} · ${pz} pieza${pz>1?"s":""}`:"Pedido vacío";
@@ -171,15 +186,16 @@ function pintarBar(){const it=items(),pz=it.reduce((s,x)=>s+x.n,0);
 
 function pintarRes(){const it=items();
   $("#resItems").innerHTML=it.length?it.map(({p,n})=>`<div class="ri"><div style="min-width:0"><div class="ref">${esc(p.r)}</div><div class="desc">${esc(p.d)}</div>
-      <div class="note num">${n} × ${fmt(p.p)}</div>${avisoQty(p,n)?`<div class="warn">${esc(avisoQty(p,n))}</div>`:""}</div>
-      <div style="display:grid;justify-items:end;gap:6px"><b class="num">${fmt(p.p*n)}</b><button type="button" data-x="${esc(p.c)}" style="padding:4px 10px;font-size:.8rem">Quitar</button></div></div>`).join(""):`<div class="empty">Todavía no agregaste productos.</div>`;
+      <div class="note num">${n} × ${fmt(pu(p,n))}${enOferta(p,n)?' <span class="tag of" style="font-size:.7rem">OFERTA</span>':""}</div>${avisoQty(p,n)?`<div class="warn">${esc(avisoQty(p,n))}</div>`:""}</div>
+      <div style="display:grid;justify-items:end;gap:6px"><b class="num">${fmt(pu(p,n)*n)}</b><button type="button" data-x="${esc(p.c)}" style="padding:4px 10px;font-size:.8rem">Quitar</button></div></div>`).join(""):`<div class="empty">Todavía no agregaste productos.</div>`;
   $("#resTot").textContent=fmt(total())+(tasa?" · "+bsDe(total()):"");
   $("#resItems").querySelectorAll("[data-x]").forEach(b=>b.onclick=()=>setQty(b.dataset.x,0));
   $("#enviar").disabled=$("#copiar").disabled=!it.length;}
 
 function texto(){const it=items(),pz=it.reduce((s,x)=>s+x.n,0);
   const L=MODO_CLI?["*PEDIDO DB18 (cliente)*",`Cliente: ${st.cli.trim()}`,`Fecha: ${hoyTxt()}`,""]:["*PEDIDO DB18*",`Vendedor: ${st.vend.trim()}`,`Cliente: ${st.cli.trim()}`,`Fecha: ${hoyTxt()}`,""];
-  it.forEach(({p,n},i)=>L.push(`${i+1}. *${p.r}* · ${p.d.length>60?p.d.slice(0,58)+"…":p.d}`,`    ${n} ${p.u||"PZA"} × ${fmt(p.p)} = ${fmt(p.p*n)}`));
+  it.forEach(({p,n},i)=>L.push(`${i+1}. *${p.r}* · ${p.d.length>60?p.d.slice(0,58)+"…":p.d}`,`    ${n} ${p.u||"PZA"} × ${fmt(pu(p,n))} = ${fmt(pu(p,n)*n)}${enOferta(p,n)?" 🔥 OFERTA":""}`));
+  if(it.some(({p,n})=>enOferta(p,n)))L.push("","_Los productos en oferta van a precio final._");
   L.push("",`*TOTAL: ${fmt(total())}*`,...(tasa?[`En Bs: ${bsDe(total())} (tasa ${fBs(tasa.tasa)})`]:[]),`${it.length} producto${it.length>1?"s":""} · ${pz} pieza${pz>1?"s":""}`);
   if(st.nota.trim())L.push("",`Nota: ${st.nota.trim()}`);
   return L.join("\n");}
