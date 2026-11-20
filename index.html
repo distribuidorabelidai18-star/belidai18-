@@ -1384,7 +1384,12 @@ function renderDetalle(first){
       const bt=$("#numGo");bt.disabled=true;bt.textContent="Cambiando…";
       try{const d={...f};for(const k of ["id","saldo","abonado","estado","ve","dv","ult"])delete d[k];
         const base=facturas.find(x=>x.id===f.id)||{};const doc={...base,numero:nuevo};delete doc.id;
+        // si la nota se hizo en "Notas de entrega", también se cambia allá (su número es su identificador)
+        const nt=notaDeFactura(f),nNid=nid.slice(1);
+        if(nt){if(notasEnt.some(n=>n.id===nNid))return fail("Ya existe una nota de entrega con ese número."),bt.disabled=false,bt.textContent="Cambiar";
+          const nd={...nt,numero:nuevo};delete nd.id;await db.doc("notas/"+nNid).set(nd);doc.notaId=nNid;}
         await db.doc("facturas/"+nid).set(doc);
+        if(nt)await db.doc("notas/"+nt.id).delete();
         for(const a of abonos.filter(a=>a.facturaId===f.id))await db.doc("abonos/"+a.id).update({facturaId:nid});
         for(const c of notasCred.filter(c=>c.facturaId===f.id))await db.doc("notasCredito/"+c.id).update({facturaId:nid,notaNumero:nuevo});
         for(const p of pagosVend.filter(p=>p.facturaId===f.id))await db.doc("pagosVend/"+p.id).update({facturaId:nid,numero:nuevo});
