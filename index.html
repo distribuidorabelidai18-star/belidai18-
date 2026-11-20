@@ -1180,6 +1180,7 @@ function calcCuadre(docs){
   const pf={};for(const d of docs)pf[String(d.numero).trim()]=d;
   const fechas=docs.map(d=>d.fecha).filter(Boolean).sort();const ultima=fechas[fechas.length-1]||hoy();
   const pagAb={};for(const a of abonos)pagAb[a.facturaId]=r2((pagAb[a.facturaId]||0)+(Number(a.montoUSD)||0));
+  for(const c of notasCred)pagAb[c.facturaId]=r2((pagAb[c.facturaId]||0)+(Number(c.montoUSD)||0)); // las notas de crédito también bajan el saldo
   const out=[];
   for(const f of saldos()){
     const num=String(f.numero||"").trim();if(!num)continue;const d=pf[num];
