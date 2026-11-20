@@ -903,11 +903,13 @@ const diasDesde=s=>{if(!s)return 0;const t=new Date(s+"T00:00:00").getTime();ret
 
 let db=null,user=null,sample=null,assets=null,canWrite=true,esDueno=false;
 let facturas=[],abonos=[],loadedF=false,loadedA=false;var notasCred=[];
+// Las notas de crédito de Carmen/Skarlet quedan "pendiente" hasta que el dueño las aprueba; solo las aprobadas bajan saldo e inventario.
+const ncOk=()=>notasCred.filter(c=>!c.estado||c.estado==="aprobada");
 const st={tab:"facturas",q:"",vend:"",estado:"abiertas",cliente:""};
 
 function saldos(){
   const pag={};for(const a of abonos){pag[a.facturaId]=r2((pag[a.facturaId]||0)+(Number(a.montoUSD)||0));}
-  for(const c of notasCred){pag[c.facturaId]=r2((pag[c.facturaId]||0)+(Number(c.montoUSD)||0));}
+  for(const c of ncOk()){pag[c.facturaId]=r2((pag[c.facturaId]||0)+(Number(c.montoUSD)||0));}
   return facturas.map(f=>{const ab=r2((pag[f.id]||0)+(Number(f.pagadoPrevio)||0));const saldo=r2((Number(f.montoUSD)||0)-ab);
     return {...f,abonado:ab,saldo:saldo<0.005?0:saldo,estado:saldo<0.005?"pagada":ab>0?"parcial":"pendiente"};});
 }
@@ -1191,7 +1193,7 @@ function calcCuadre(docs){
   const pf={};for(const d of docs)pf[String(d.numero).trim()]=d;
   const fechas=docs.map(d=>d.fecha).filter(Boolean).sort();const ultima=fechas[fechas.length-1]||hoy();
   const pagAb={};for(const a of abonos)pagAb[a.facturaId]=r2((pagAb[a.facturaId]||0)+(Number(a.montoUSD)||0));
-  for(const c of notasCred)pagAb[c.facturaId]=r2((pagAb[c.facturaId]||0)+(Number(c.montoUSD)||0)); // las notas de crédito también bajan el saldo
+  for(const c of ncOk())pagAb[c.facturaId]=r2((pagAb[c.facturaId]||0)+(Number(c.montoUSD)||0)); // las notas de crédito también bajan el saldo
   const out=[];
   for(const f of saldos()){
     const num=String(f.numero||"").trim();if(!num)continue;if(window._choques?.has(num))continue;const d=pf[num];
@@ -1247,7 +1249,7 @@ function movimientosDe(k){
   const movs=[...notas.map(n=>({t:"nota",fecha:n.fecha||"",creado:n.creado||0,monto:Number(n.montoUSD)||0,n})),
     ...notas.filter(n=>Number(n.pagadoPrevio)>0).map(n=>({t:"pago",previo:true,fecha:n.fecha||"",creado:(n.creado||0)+1,monto:Number(n.pagadoPrevio),n})),
     ...abonos.filter(a=>ids.has(a.facturaId)).map(a=>({t:"pago",fecha:a.fecha||"",creado:a.creado||0,monto:Number(a.montoUSD)||0,a,n:notas.find(x=>x.id===a.facturaId)})),
-    ...notasCred.filter(c=>ids.has(c.facturaId)).map(c=>({t:"pago",nc:c,fecha:c.fecha||"",creado:c.creado||0,monto:Number(c.montoUSD)||0,n:notas.find(x=>x.id===c.facturaId)}))]
+    ...ncOk().filter(c=>ids.has(c.facturaId)).map(c=>({t:"pago",nc:c,fecha:c.fecha||"",creado:c.creado||0,monto:Number(c.montoUSD)||0,n:notas.find(x=>x.id===c.facturaId)}))]
     .sort((x,y)=>x.fecha.localeCompare(y.fecha)||(x.t===y.t?0:x.t==="nota"?-1:1)||x.creado-y.creado);
   let s=0;for(const m of movs){s=r2(s+(m.t==="nota"?m.monto:-m.monto));m.saldo=s;}
   return {notas,movs,nombre:notas.at(-1)?.cliente||"Sin nombre",rif:k.startsWith("r:")?k.slice(2):""};
@@ -1310,7 +1312,7 @@ function renderDetalle(first){
     </div>
     <div class="bar"><i style="width:${pct}%"></i></div>
     ${Number(f.pagadoPrevio)>0?`<div class="note">Incluye ${fmt(f.pagadoPrevio)} abonados en Profit antes de importar la nota.</div>`:""}
-    ${(()=>{const t=r2(notasCred.filter(c=>c.facturaId===f.id).reduce((x,c)=>x+(Number(c.montoUSD)||0),0));return t>0?`<div class="note">Incluye ${fmt(t)} en notas de crédito.</div>`:"";})()}
+    ${(()=>{const t=r2(ncOk().filter(c=>c.facturaId===f.id).reduce((x,c)=>x+(Number(c.montoUSD)||0),0));return t>0?`<div class="note">Incluye ${fmt(t)} en notas de crédito.</div>`:"";})()}
     ${f.moneda==="Bs"?`<div class="note">Nota original: ${fmtBs(f.montoOriginal)} a tasa ${String(f.tasa).replace(".",",")} Bs/$</div>`:""}
   </div>
   ${(()=>{const pv=pagosVend.filter(x=>x.facturaId===f.id&&(x.estado==="pendiente"||x.estado==="rechazado")).sort((a,b)=>(b.creado||0)-(a.creado||0)).slice(0,5);
@@ -2041,19 +2043,26 @@ $("#btnTasa").onclick=abrirTasa;
 const NC_MOT=[{id:"devolucion",n:"Devolución de mercancía"},{id:"descuento",n:"Descuento"},{id:"precio",n:"Error de precio"},{id:"otro",n:"Otro"}];
 function ncMotivo(id){return NC_MOT.find(m=>m.id===id)?.n||id||"";}
 function ncSiguiente(){let mx=0;for(const c of notasCred){const n=parseInt(String(c.numero||"").replace(/\D/g,""),10);if(n>mx)mx=n;}return "NC-"+String(mx+1).padStart(4,"0");}
-function ncDevueltos(fid){const m={};for(const c of notasCred)if(c.facturaId===fid)for(const it of c.items||[])m[it.codigo]=(m[it.codigo]||0)+(Number(it.cantidad)||0);return m;}
+function ncDevueltos(fid){const m={};for(const c of notasCred)if(c.facturaId===fid&&c.estado!=="rechazada")for(const it of c.items||[])m[it.codigo]=(m[it.codigo]||0)+(Number(it.cantidad)||0);return m;}
 function ncCard(f){const l=notasCred.filter(c=>c.facturaId===f.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0));
   const puede=canWrite&&!esVendedor()&&f.saldo>0.009;
   if(!l.length&&!puede)return "";
   return `<div class="card" id="ncCard"><div class="toolbar"><h3 style="font-size:1.05rem">Notas de crédito (${l.length})</h3><span class="spacer"></span>${puede?'<button type="button" id="ncNueva">+ Nota de crédito / devolución</button>':""}</div>
-    ${l.length?l.map(c=>`<div class="ab" style="grid-template-columns:auto minmax(0,1fr) auto auto"><span class="tag">${esc(c.numero||"NC")}</span>
-      <span style="min-width:0"><div class="sub">${fFecha(c.fecha)} · ${esc(ncMotivo(c.motivo))}${c.creadoPor?" · por "+esc(String(c.creadoPor).split("@")[0]):""}</div>${(c.items||[]).length?`<div class="sub">${c.items.map(i=>`${Number(i.cantidad)} × ${esc(i.referencia||i.codigo)}`).join(", ")}${c.inventario?" · volvió al inventario":""}</div>`:""}${c.detalle?`<div class="sub">${esc(c.detalle)}</div>`:""}</span>
+    ${l.length?l.map(c=>`<div class="ab" style="grid-template-columns:auto minmax(0,1fr) auto auto${c.estado==="rechazada"?";opacity:.55":""}"><span class="tag">${esc(c.numero||"NC")}</span>
+      <span style="min-width:0"><div class="sub">${c.estado==="pendiente"?'<b style="color:var(--warn)">⏳ Por aprobar</b> · ':c.estado==="rechazada"?'<b style="color:var(--bad)">Rechazada</b> · ':""}${fFecha(c.fecha)} · ${esc(ncMotivo(c.motivo))}${c.creadoPor?" · por "+esc(String(c.creadoPor).split("@")[0]):""}</div>${(c.items||[]).length?`<div class="sub">${c.items.map(i=>`${Number(i.cantidad)} × ${esc(i.referencia||i.codigo)}`).join(", ")}${c.inventario?(c.estado==="pendiente"?" · vuelve al inventario al aprobarla":c.estado==="rechazada"?"":" · volvió al inventario"):""}</div>`:""}${c.detalle?`<div class="sub">${esc(c.detalle)}</div>`:""}</span>
       <span class="num">${fmt(c.montoUSD)}</span>
-      <span style="display:flex;gap:4px"><button type="button" data-ncpdf="${esc(c.id)}" aria-label="PDF de la nota de crédito">PDF</button>${esDueno?`<button class="danger" type="button" data-ncdel="${esc(c.id)}">Borrar</button>`:""}</span></div>`).join(""):'<div class="note">Para devoluciones de mercancía, descuentos o errores de precio. Baja el saldo de esta nota.</div>'}<div id="ncMsg" class="status" hidden></div></div>`;}
+      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${c.estado==="pendiente"?(esDueno?`<button type="button" class="primary" data-ncok="${esc(c.id)}">Aprobar</button><button type="button" data-ncno="${esc(c.id)}">Rechazar</button>`:""):c.estado==="rechazada"?"":`<button type="button" data-ncpdf="${esc(c.id)}" aria-label="PDF de la nota de crédito">PDF</button>`}${esDueno?`<button class="danger" type="button" data-ncdel="${esc(c.id)}">Borrar</button>`:""}</span></div>`).join(""):'<div class="note">Para devoluciones de mercancía, descuentos o errores de precio. Baja el saldo de esta nota.</div>'}<div id="ncMsg" class="status" hidden></div></div>`;}
 function ncBind(f){$("#ncNueva")&&($("#ncNueva").onclick=()=>abrirNC(f.id));
   document.querySelectorAll("[data-ncpdf]").forEach(b=>b.onclick=()=>{const c=notasCred.find(x=>x.id===b.dataset.ncpdf);if(c)pdfNC(c,null);});
   document.querySelectorAll("[data-ncdel]").forEach(b=>b.onclick=async()=>{if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Seguro?";return;}
-    b.disabled=true;try{await db.doc("notasCredito/"+b.dataset.ncdel).delete();}catch(e){b.disabled=false;b.textContent="Error";}});}
+    b.disabled=true;try{await db.doc("notasCredito/"+b.dataset.ncdel).delete();}catch(e){b.disabled=false;b.textContent="Error";}});
+  ncBindAprobar(document);}
+function ncBindAprobar(root){
+  root.querySelectorAll("[data-ncok]").forEach(b=>b.onclick=async()=>{const c=notasCred.find(x=>x.id===b.dataset.ncok);if(!c)return;
+    const sal=saldos().find(x=>x.id===c.facturaId);if(sal&&Number(c.montoUSD)>sal.saldo+0.009){b.textContent="Mayor que el saldo";return;}
+    b.disabled=true;try{await db.doc("notasCredito/"+c.id).update({estado:"aprobada",aprobadoPor:window.PERFIL?.email||"",aprobado:Date.now()});}catch(e){b.disabled=false;b.textContent="Error";}});
+  root.querySelectorAll("[data-ncno]").forEach(b=>b.onclick=async()=>{if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Rechazar?";return;}
+    b.disabled=true;try{await db.doc("notasCredito/"+b.dataset.ncno).update({estado:"rechazada",rechazadoPor:window.PERFIL?.email||"",rechazado:Date.now()});}catch(e){b.disabled=false;b.textContent="Error";}});}
 let ncF=null;
 function abrirNC(fid){const f=saldos().find(x=>x.id===fid);if(!f)return;const nt=notaDeFactura(f);const its=(nt?.items||[]).filter(i=>i.codigo);const dev=ncDevueltos(f.id);
   const ivaF=nt?.iva?1+IVA:1;ncF={fid,mot:its.length?"devolucion":"descuento",q:{}};
@@ -2071,7 +2080,7 @@ function abrirNC(fid){const f=saldos().find(x=>x.id===fid);if(!f)return;const nt
         <label class="f">Detalle (opcional)<textarea id="ncDet" placeholder="Ej: producto defectuoso, descuento acordado por pronto pago…"></textarea></label>
         <div class="totals" style="grid-template-columns:1fr 1fr"><div><span class="eyebrow">Monto</span><span class="num" id="ncTot" style="font-weight:600">$0,00</span></div><div><span class="eyebrow">Saldo queda en</span><span class="num" id="ncQueda">${fmt(f.saldo)}</span></div></div>
         <div id="ncErr" class="err" hidden></div>
-        <div class="toolbar"><span class="spacer"></span><button class="primary" type="button" id="ncGo">Guardar nota de crédito</button></div>
+        <div class="toolbar"><span class="spacer"></span>${esDueno?"":'<span class="note" style="flex:1">Queda por aprobar: el saldo y el inventario cambian cuando el dueño la apruebe.</span>'}<button class="primary" type="button" id="ncGo">${esDueno?"Guardar nota de crédito":"Enviar para aprobar"}</button></div>
       </div>`);
     const tot=()=>{let t=0;if(conIt){document.querySelectorAll("[data-q]").forEach(inp=>{const k=+inp.dataset.q,max=+inp.dataset.max;let n=Math.floor(num(inp.value)||0);if(n>max){n=max;inp.value=max;}ncF.q[k]=n;const sb=r2(n*unit(its[k]));inp.closest(".prow").querySelector("[data-sub]").textContent=n?fmt(sb):"";t+=sb;});}else t=num($("#ncMonto").value)||0;
       t=r2(t);$("#ncTot").textContent=fmt(t);$("#ncQueda").textContent=fmt(Math.max(0,f.saldo-t));return t;};
@@ -2084,9 +2093,9 @@ function abrirNC(fid){const f=saldos().find(x=>x.id===fid);if(!f)return;const nt
       const items=conIt?its.map((i,k)=>({codigo:String(i.codigo),referencia:i.referencia||"",descripcion:i.descripcion||"",cantidad:ncF.q[k]||0,precioUnit:unit(i)})).filter(x=>x.cantidad>0):[];
       const b=$("#ncGo");b.disabled=true;b.textContent="Guardando…";
       try{const doc={numero,facturaId:f.id,notaNumero:f.numero||"",cliente:f.cliente||"",rif:f.rif||"",vendedor:f.vendedor||"",fecha:$("#ncFecha").value||hoy(),motivo:ncF.mot,
-          detalle:$("#ncDet").value.trim(),montoUSD:t,items,inventario:!!(items.length&&$("#ncInv")?.checked),creadoPor:window.PERFIL?.email||"",creado:Date.now()};
+          detalle:$("#ncDet").value.trim(),montoUSD:t,items,inventario:!!(items.length&&$("#ncInv")?.checked),creadoPor:window.PERFIL?.email||"",creado:Date.now(),estado:esDueno?"aprobada":"pendiente"};
         const r=await db.collection("notasCredito").add(doc);notasCred=[...notasCred.filter(x=>x.id!==r?.id),{id:r?.id||"tmp",...doc}];
-        msgAbono=`Nota de crédito ${numero} por ${fmt(t)} guardada.`;abrirDetalleMsg(f.id);}
+        msgAbono=esDueno?`Nota de crédito ${numero} por ${fmt(t)} guardada.`:`Nota de crédito ${numero} por ${fmt(t)} enviada. Queda por aprobar: el saldo no cambia hasta que el dueño la apruebe.`;abrirDetalleMsg(f.id);}
       catch(x){console.error(x);b.disabled=false;b.textContent="Guardar nota de crédito";fail(x?.code==="invalid_argument"||/permission|policy/i.test(x?.message||"")?"No tienes permiso para hacer notas de crédito. Avísale al dueño.":"No se pudo guardar. Revisa tu conexión e intenta de nuevo.");}};};
   pinta();}
 function abrirDetalleMsg(id){const m=msgAbono;abrirDetalle(id);msgAbono=m;renderDetalle(false);}
@@ -2110,11 +2119,17 @@ function abrirNCLista(){panel(`<div class="ph"><div><div class="eyebrow">Cuentas
     $("#ncRes").innerHTML=r.length?`<div class="list">${r.map(f=>`<button type="button" class="prow" data-ncf="${esc(f.id)}" style="grid-template-columns:minmax(0,1fr) auto;text-align:left;width:100%"><span><div class="cl">${esc(f.cliente)}</div><div class="sub">Nota ${esc(f.numero||"")} · ${fFecha(f.fecha)}</div></span><span class="num">${fmt(f.saldo)}</span></button>`).join("")}</div>`:'<div class="note">No hay notas con saldo que coincidan.</div>';
     $("#ncRes").querySelectorAll("[data-ncf]").forEach(b=>b.onclick=()=>{detId=b.dataset.ncf;abrirNC(b.dataset.ncf);});};
   pintarNCLista();}
-function pintarNCLista(){const el=$("#ncLista");if(!el)return;const l=[...notasCred].sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0));
-  const mes=hoy().slice(0,7),tm=r2(l.filter(c=>(c.fecha||"").startsWith(mes)).reduce((x,c)=>x+(Number(c.montoUSD)||0),0));
-  el.innerHTML=l.length?`<div class="note" style="margin:4px 0">Este mes: ${fmt(tm)} en ${l.filter(c=>(c.fecha||"").startsWith(mes)).length} nota(s) de crédito.</div><div class="list">${l.slice(0,200).map(c=>`<div class="prow" style="grid-template-columns:5.2rem minmax(0,1fr) auto auto;align-items:center"><span class="mono" style="font-weight:600">${esc(c.numero||"")}</span>
+function pintarNCLista(){const el=$("#ncLista");if(!el)return;
+  const pend=notasCred.filter(c=>c.estado==="pendiente");
+  const pendHtml=pend.length?`<div class="card" style="border-color:var(--warn);margin-bottom:10px"><b>⏳ Por aprobar (${pend.length})</b><div class="list">${pend.map(c=>`<div class="prow" style="grid-template-columns:5.2rem minmax(0,1fr) auto auto;align-items:center"><span class="mono" style="font-weight:600">${esc(c.numero||"")}</span>
+    <span style="min-width:0" class="lk" role="button" tabindex="0" data-ncver="${esc(c.facturaId)}"><div class="cl">${esc(c.cliente||"")}</div><div class="sub">${fFecha(c.fecha)} · nota ${esc(c.notaNumero||"")} · ${esc(ncMotivo(c.motivo))}${c.creadoPor?" · por "+esc(String(c.creadoPor).split("@")[0]):""}${(c.items||[]).length?" · "+c.items.map(i=>`${Number(i.cantidad)} × ${esc(i.referencia||i.codigo)}`).join(", "):""}${c.detalle?" · "+esc(c.detalle):""}</div></span>
+    <span class="num">${fmt(c.montoUSD)}</span><span style="display:flex;gap:4px">${esDueno?`<button type="button" class="primary" data-ncok="${esc(c.id)}">Aprobar</button><button type="button" data-ncno="${esc(c.id)}">Rechazar</button>`:'<span class="note">Esperando al dueño</span>'}</span></div>`).join("")}</div></div>`:"";
+  const l=[...notasCred].filter(c=>c.estado!=="pendiente").sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0));
+  const mes=hoy().slice(0,7),tm=r2(l.filter(c=>c.estado!=="rechazada"&&(c.fecha||"").startsWith(mes)).reduce((x,c)=>x+(Number(c.montoUSD)||0),0));
+  el.innerHTML=pendHtml+(l.length?`<div class="note" style="margin:4px 0">Este mes: ${fmt(tm)} en ${l.filter(c=>(c.fecha||"").startsWith(mes)).length} nota(s) de crédito.</div><div class="list">${l.slice(0,200).map(c=>`<div class="prow" style="grid-template-columns:5.2rem minmax(0,1fr) auto auto;align-items:center"><span class="mono" style="font-weight:600">${esc(c.numero||"")}</span>
     <span style="min-width:0" class="lk" role="button" tabindex="0" data-ncver="${esc(c.facturaId)}"><div class="cl">${esc(c.cliente||"")}</div><div class="sub">${fFecha(c.fecha)} · nota ${esc(c.notaNumero||"")} · ${esc(ncMotivo(c.motivo))}</div></span><span class="num">${fmt(c.montoUSD)}</span><button type="button" data-ncpdf="${esc(c.id)}">PDF</button></div>`).join("")}</div>`
-    :'<div class="list"><div class="empty">Todavía no hay notas de crédito.</div></div>';
+    :(pend.length?"":'<div class="list"><div class="empty">Todavía no hay notas de crédito.</div></div>'));
+  ncBindAprobar(el);
   el.querySelectorAll("[data-ncver]").forEach(x=>x.onclick=()=>abrirDetalle(x.dataset.ncver));
   el.querySelectorAll("[data-ncpdf]").forEach(b=>b.onclick=()=>{const c=notasCred.find(x=>x.id===b.dataset.ncpdf);if(c)pdfNC(c,$("#ncMsg"));});}
 $("#btnNC").onclick=abrirNCLista;
@@ -2303,8 +2318,8 @@ function stockMap(){const m={};const add=(c,n)=>{m[c]=(m[c]||0)+n;};
   for(const d of invDocs)for(const it of d.items||[])add(String(it.codigo),Number(it.cantidad)||0);
   for(const p of pedidos)for(const it of p.items||[])add(String(it.codigo),-(Number(it.cantidad)||0));
   for(const n of (typeof notasEnt!=="undefined"?notasEnt:[]))if(!n.pedidoId)for(const it of n.items||[])add(String(it.codigo),-(Number(it.cantidad)||0));
-  for(const c of notasCred)if(c.inventario)for(const it of c.items||[])add(String(it.codigo),Number(it.cantidad)||0);return m;}
-let _sm=null,_smk="";function existencia(c){const k=notasCred.length+":"+(notasCred.at(-1)?.id||"")+"|"+invDocs.length+"|"+pedidos.length+"|"+(invDocs.at(-1)?.id||"")+(pedidos.at(-1)?.id||"")+"|"+(typeof notasEnt!=="undefined"?notasEnt.length+":"+(notasEnt.at(-1)?.editado||notasEnt.at(-1)?.id||""):"");if(k!==_smk||!_sm){_sm=stockMap();_smk=k;}return _sm[String(c)]||0;}
+  for(const c of ncOk())if(c.inventario)for(const it of c.items||[])add(String(it.codigo),Number(it.cantidad)||0);return m;}
+let _sm=null,_smk="";function existencia(c){const k=ncOk().length+":"+notasCred.length+":"+(notasCred.at(-1)?.id||"")+"|"+invDocs.length+"|"+pedidos.length+"|"+(invDocs.at(-1)?.id||"")+(pedidos.at(-1)?.id||"")+"|"+(typeof notasEnt!=="undefined"?notasEnt.length+":"+(notasEnt.at(-1)?.editado||notasEnt.at(-1)?.id||""):"");if(k!==_smk||!_sm){_sm=stockMap();_smk=k;}return _sm[String(c)]||0;}
 function stockFresh(){_sm=null;}
 function renderInv(){
   if(sec!=="inv")return;stockFresh();
@@ -2383,7 +2398,7 @@ $("#enGuardar").onclick=async()=>{if(!ent.items.length)return enMsg("Agrega los 
   catch(x){enMsg("No se pudo guardar la entrada. Intenta de nuevo.","err");}b.disabled=false;};
 function pintarMovs(){const el=$("#mvLista");
   const L=[...invDocs.map(d=>({id:d.id,inv:true,f:d.fecha,c:d.creado||0,t:d.tipo==="ajuste"?"Conteo / ajuste":"Entrada de mercancía",s:[d.proveedor,d.nota].filter(Boolean).join(" · "),n:(d.items||[]).reduce((x,i)=>x+(Number(i.cantidad)||0),0),k:(d.items||[]).length})),
-    ...notasCred.filter(x=>x.inventario&&(x.items||[]).length).map(x=>({f:x.fecha,c:x.creado||0,t:"Devolución "+(x.numero||""),s:(x.cliente||"")+(x.notaNumero?" · nota "+x.notaNumero:""),n:(x.items||[]).reduce((a,i)=>a+(Number(i.cantidad)||0),0),k:(x.items||[]).length})),
+    ...ncOk().filter(x=>x.inventario&&(x.items||[]).length).map(x=>({f:x.fecha,c:x.creado||0,t:"Devolución "+(x.numero||""),s:(x.cliente||"")+(x.notaNumero?" · nota "+x.notaNumero:""),n:(x.items||[]).reduce((a,i)=>a+(Number(i.cantidad)||0),0),k:(x.items||[]).length})),
     ...pedidos.map(o=>({f:o.fecha,c:o.creado||0,t:"Pedido "+o.numero,s:o.cliente||"",n:-(o.items||[]).reduce((x,i)=>x+(Number(i.cantidad)||0),0),k:(o.items||[]).length}))].sort((a,b)=>(b.f||"").localeCompare(a.f||"")||b.c-a.c);
   if(!L.length){el.innerHTML='<div class="list"><div class="empty">Todavía no hay movimientos de inventario.</div></div>';return;}
   el.innerHTML=`<div class="list">${L.slice(0,150).map(m=>`<div class="prow" style="grid-template-columns:5.5rem minmax(0,1fr) auto auto"><span class="sub">${fFecha(m.f)}</span><span style="min-width:0"><div class="cl">${esc(m.t)}</div><div class="sub">${m.s?esc(m.s)+" · ":""}${m.k} producto${m.k===1?"":"s"}</div></span><span class="num" style="font-weight:700;color:${m.n<0?"var(--bad)":"var(--ok)"}">${m.n>0?"+":""}${m.n}</span>${m.inv?`<button type="button" class="danger" data-mvdel="${esc(m.id)}">Borrar</button>`:"<span></span>"}</div>`).join("")}</div>
@@ -3712,7 +3727,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;$('.side [data-sec="ofe"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="ofe")ir("ofe");}catch(e){}}
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
   if(canWrite&&!esVendedor())_pubOn=true; // Carmen y Skarlet también actualizan la lista de pedidos al hacer notas
-  if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega y registrar pagos. Los pagos quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
+  if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega, registrar pagos y hacer notas de crédito. Los pagos y las notas de crédito quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
   const onErr=e=>{clearTimeout(timer);loadedF=true;banner(e?.code==="revoked"?"Ya no tienes acceso a estos datos.":"Se perdió la conexión con la base de datos. Recarga la página.");render();};
   db.collection("inventario").onSnapshot(s=>{invDocs=s.docs.map(d=>({id:d.id,...d.data()}));loadedInv=true;renderInv();programarPub();},()=>{loadedInv=true;renderInv();});
@@ -3724,7 +3739,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   db.doc("config/reposicion").onSnapshot(s=>{repoCfg={marcas:{},...(s.exists?s.data():{})};renderInv();},()=>{});
   db.doc("config/pedidos").onSnapshot(s=>{if(s.exists)cfgPed={prefijo:"P-",inicio:1,...s.data()};renderPed(true);},()=>{});
   db.collection("facturas").onSnapshot(s=>{facturas=s.docs.map(d=>({id:d.id,...d.data()}));_nr=null;if(!s.metadata.fromCache){clearTimeout(timer);banner("");}loadedF=true;render();programarCuentas();if(detId&&$("#fAbono,#delF,.totals"))renderDetalle(false);},onErr);
-  {$("#btnNC").hidden=!canWrite||esVendedor();db.collection("notasCredito").onSnapshot(s=>{notasCred=s.docs.map(d=>({id:d.id,...d.data()}));render();programarCuentas();stockFresh();renderInv();programarPub();
+  {$("#btnNC").hidden=!canWrite||esVendedor();db.collection("notasCredito").onSnapshot(s=>{notasCred=s.docs.map(d=>({id:d.id,...d.data()}));{const n=notasCred.filter(c=>c.estado==="pendiente").length;$("#btnNC").innerHTML=`Notas de crédito${n&&esDueno?`<span class="badgeN">${n}</span>`:""}`;}render();programarCuentas();stockFresh();renderInv();programarPub();
     if(detId&&$(".totals"))renderDetalle(false);else if(cliK&&$(".mov")&&!$("#cpyTxt"))abrirCliente(cliK);else if($("#ncLista"))pintarNCLista();},()=>{});}
   db.collection("ofertas").onSnapshot(s=>{ofertas=s.docs.map(d=>({id:d.id,...d.data()}));if(sec==="ofe")pintarOfertas();programarPub();if(neTab!=="guardadas"&&!document.activeElement?.closest("#neItems"))pintarNe();},()=>{});
   db.collection("abonos").onSnapshot(s=>{abonos=s.docs.map(d=>({id:d.id,...d.data()}));loadedA=true;render();programarCuentas();if(detId&&$(".totals"))renderDetalle(false);else if(cliK&&$(".mov")&&!$("#cpyTxt"))abrirCliente(cliK);},onErr);
