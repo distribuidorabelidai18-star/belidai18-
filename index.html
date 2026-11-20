@@ -1419,7 +1419,7 @@ async function guardarAbono(f){
         reportadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),metodo:metodoSel,moneda:bs?"Bs":"USD",montoOriginal:r2(m),tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
         referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),foto,creado:Date.now()});
       msgAbono=`Pago de ${fmt(Math.min(usd,f.saldo))} enviado. Queda por aprobar.`;$("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
-    }catch(e){console.error(e);btn.disabled=false;$("#aTotal").disabled=false;btn.textContent="Enviar para aprobar";fail("No se pudo enviar el pago. Intenta de nuevo.");}
+    }catch(e){console.error(e);btn.disabled=false;$("#aTotal").disabled=false;btn.textContent="Enviar para aprobar";fail("No se pudo enviar el pago. "+(/row-level security|policy|permission|42501|403/i.test((e?.message||"")+(e?.code||"")+(e?.statusCode||""))?"Tu usuario no tiene permiso para guardar esto (hay que darle acceso en Supabase).":"Intenta de nuevo.")+" ["+String(e?.message||e?.code||e).slice(0,120)+"]");}
     return;}
   try{
     await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:metodoSel,montoOriginal:r2(m),moneda:bs?"Bs":"USD",tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
