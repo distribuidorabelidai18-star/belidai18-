@@ -80,6 +80,7 @@ button:disabled{opacity:.5;cursor:default}
 
   <div id="tasaBox" class="card hidden" style="grid-template-columns:auto 1fr;align-items:center"></div>
 
+  <div id="pendBox" class="card hidden" style="background:#fff8e6;border-color:#f3d48a"></div>
   <div id="estado" class="status"><span class="spin"></span>Cargando productos…</div>
 
   <div id="cat" class="hidden">
@@ -135,7 +136,10 @@ function pu(p,n){return enOferta(p,n)?ofAct(p).p:p.p;}
 function avisoOf(p,n){const o=ofAct(p);if(!o||!(n>0))return "";if(n<o.n)return `🔥 Llevando ${o.n} o más: ${fmt(o.p)} c/u`;if(o.r!=null&&n>o.r)return `Solo quedan ${o.r} a precio de oferta`;return "🔥 Precio de oferta aplicado";}
 let st={vend:"",cli:"",nota:"",items:{}};
 try{st={...st,...JSON.parse(localStorage.getItem(LS)||"{}")};}catch(e){}
-const guardar=()=>{try{localStorage.setItem(LS,JSON.stringify(st));}catch(e){}};
+const guardar=()=>{st.t=Date.now();try{localStorage.setItem(LS,JSON.stringify(st));}catch(e){}};
+// Un pedido a medio hacer que lleva más de 12 horas guardado en este teléfono se borra solo.
+if(Object.keys(st.items||{}).length&&(!st.t||Date.now()-st.t>12*3600e3)){st.items={};st.nota="";if(!MODO_CLI)st.cli="";guardar();}
+const _pendiente=Object.keys(st.items||{}).length;
 
 function paso(p){return Number(p.q)>0?Number(p.q):1;}
 function avisoQty(p,n){const of=avisoOf(p,n),b=avisoQty0(p,n);return [b,of].filter(Boolean).join(" · ");}
@@ -219,6 +223,10 @@ $("#vend").value=st.vend;$("#cli").value=st.cli;$("#nota").value=st.nota;
 $("#vend").oninput=e=>{st.vend=e.target.value;guardar();};$("#cli").oninput=e=>{st.cli=e.target.value;guardar();};$("#nota").oninput=e=>{st.nota=e.target.value;guardar();};
 $("#q").oninput=pintarProds;
 $("#btnVer").onclick=()=>ver(vista==="cat"?"res":"cat");
+function empezarNuevo(){st.items={};if(!MODO_CLI){st.cli="";$("#cli").value="";}st.nota="";$("#nota").value="";guardar();pintarProds();pintarBar();ver("cat");$("#pendBox").classList.add("hidden");}
+if(_pendiente){const b=$("#pendBox");b.classList.remove("hidden");
+  b.innerHTML=`<div><b>Tienes un pedido sin enviar</b> (${_pendiente} producto${_pendiente>1?"s":""}${st.cli?" · "+esc(st.cli):""}).</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="pendSeguir">Seguir con ese pedido</button><button type="button" class="primary" id="pendNuevo" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent)">Empezar uno nuevo</button></div>`;
+  $("#pendSeguir").onclick=()=>b.classList.add("hidden");$("#pendNuevo").onclick=empezarNuevo;}
 $("#vaciar").onclick=()=>{if(!confirm("¿Vaciar el pedido?"))return;st.items={};if(!MODO_CLI){st.cli="";$("#cli").value="";}st.nota="";$("#nota").value="";guardar();pintarProds();ver("cat");};
 $("#copiar").onclick=async()=>{if(!validar())return;try{await navigator.clipboard.writeText(texto());$("#copiar").textContent="✓ Copiado";setTimeout(()=>$("#copiar").textContent="Copiar pedido",2000);}catch(e){}};
 $("#enviar").onclick=()=>{if(!validar())return;window.open("https://wa.me/"+WA+"?text="+encodeURIComponent(texto()),"_blank");
