@@ -619,7 +619,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <form class="scan" id="neScan" novalidate>
         <label class="f">Piezas<input id="neQty" type="number" min="1" value="1" inputmode="numeric"></label>
         <label class="f">Producto (código, referencia o nombre)<input id="neCode" list="dlProd" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
-        <label class="f">Precio $ c/u<input id="nePre" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label>
+        <label class="f">Precio $ c/u<input id="nePre" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></label>
         <label class="f">Desc. %<input id="neDesc" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="0"></label>
         <button type="submit">Agregar</button>
       </form>
@@ -2713,7 +2713,7 @@ function pintarCot(flash){
     ${fotoCelda(fid,"","role=\"button\" tabindex=\"0\" data-fo=\"1\" aria-label=\""+(fid?"Cambiar foto":"Ponerle foto")+"\" title=\""+(fid?"Cambiar foto":"Ponerle foto")+"\"")}
     <span class="c-p" style="min-width:0"><div class="cl" style="white-space:normal">${esc(it.descripcion)}</div><div class="sub" style="white-space:normal">${esc(it.referencia||"—")} · ${esc(it.codigo)}${ex!=null?` · <span style="color:${ex<(Number(it.cantidad)||0)?"var(--bad)":"inherit"}">hay ${ex}</span>`:""}${lista?` · lista ${fmt(lista)}`:""}${esp?` · <b style="color:var(--warn)">precio especial</b>`:""}</div></span>
     <span><span class="lbl">Piezas</span><span class="qty"><button type="button" data-d="-1" aria-label="Menos">−</button><input class="iq" type="number" min="1" inputmode="numeric" value="${Number(it.cantidad)||1}" aria-label="Piezas"><button type="button" data-d="1" aria-label="Más">+</button></span></span>
-    <span><span class="lbl">Precio c/u</span><span class="pr${esp?" esp":""}">$<input class="ip" type="number" min="0" step="0.01" inputmode="decimal" value="${Number(it.precio)?r2(it.precio):""}" placeholder="0,00" aria-label="Precio por pieza"></span></span>
+    <span><span class="lbl">Precio c/u</span><span class="pr${esp?" esp":""}">$<input class="ip" type="text" inputmode="decimal" autocomplete="off" value="${Number(it.precio)?r2(it.precio):""}" placeholder="0,00" aria-label="Precio por pieza"></span></span>
     <span><span class="lbl">Descuento</span><span class="ds${descDe(it)?" on":""}"><input class="idc" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="${descDe(it)||""}" placeholder="0" aria-label="Descuento en porcentaje">%</span></span>
     <span class="st"><span class="lbl">Subtotal</span><span class="sv">${descDe(it)?`<s>${fmt((Number(it.cantidad)||0)*(Number(it.precio)||0))}</s>`:""}${fmt(subDe(it))}</span></span>
     <button type="button" class="x" aria-label="Quitar">✕</button></div>`;}).join("");
@@ -3208,7 +3208,7 @@ function pintarNe(flash){const el=$("#neItems");if(!el)return;
     return `<div class="ci${String(it.codigo)===String(flash)?" flash":""}" data-i="${i}">${fotoCelda(fotoDe(it),"","")}
     <span style="min-width:0"><div class="cl" style="white-space:normal">${esc(it.descripcion)}</div><div class="sub" style="white-space:normal">${esc(it.referencia||"—")} · ${esc(it.codigo)}${ex!=null&&!ne.pedidoId?` · <span style="color:${ex<(Number(it.cantidad)||0)?"var(--bad)":"inherit"}">hay ${ex}</span>`:""}${lista?` · lista ${fmt(lista)}`:""}${it.oferta?` · <b style="color:#c2410c">🔥 OFERTA</b>`:esp?` · <b style="color:var(--warn)">precio especial</b>`:""}${(()=>{if(it.oferta)return "";const of=ofertaDe(it.codigo,{fecha:ne.fecha,excl:ne.editando});return of?` · <span style="color:#c2410c">🔥 oferta ${fmt(of.it.precio)} llevando ${Math.max(1,Number(of.it.minimo)||1)}+${isFinite(of.rest)?` (quedan ${of.rest})`:""}</span>`:"";})()}${!(Number(it.precio)>0)?` · <b style="color:var(--bad)">sin precio</b>`:""}</div></span>
     <span><span class="lbl">Piezas</span><span class="qty"><button type="button" data-d="-1" aria-label="Menos">−</button><input class="iq" type="number" min="1" inputmode="numeric" value="${Number(it.cantidad)||1}" aria-label="Piezas"><button type="button" data-d="1" aria-label="Más">+</button></span></span>
-    <span><span class="lbl">Precio c/u</span><span class="pr${esp?" esp":""}">$<input class="ip" type="number" min="0" step="0.01" inputmode="decimal" value="${Number(it.precio)?r2(it.precio):""}" placeholder="0,00" aria-label="Precio por pieza"></span></span>
+    <span><span class="lbl">Precio c/u</span><span class="pr${esp?" esp":""}">$<input class="ip" type="text" inputmode="decimal" autocomplete="off" value="${Number(it.precio)?r2(it.precio):""}" placeholder="0,00" aria-label="Precio por pieza"></span></span>
     <span><span class="lbl">Descuento</span><span class="ds${descDe(it)?" on":""}"><input class="idc" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="${descDe(it)||""}" placeholder="0" aria-label="Descuento">%</span></span>
     <span class="st"><span class="lbl">Subtotal</span><span class="sv">${descDe(it)?`<s>${fmt((Number(it.cantidad)||0)*(Number(it.precio)||0))}</s>`:""}${fmt(subDe(it))}</span></span>
     <button type="button" class="x" aria-label="Quitar">✕</button></div>`;}).join("");
@@ -3233,7 +3233,11 @@ function renderNe(){if(sec!=="ne")return;
 function abrirNeTab(t){neTab=t;document.querySelectorAll("#neTabs [data-nt]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.nt===t)));for(const k of ["nueva","guardadas"])$("#nt-"+k).hidden=k!==t;renderNe();}
 document.querySelectorAll("#neTabs [data-nt]").forEach(b=>b.onclick=()=>abrirNeTab(b.dataset.nt));
 cargarCamposNe();
-$("#neCode").addEventListener("change",()=>{const p=buscarProducto($("#neCode").value);const ip=$("#nePre");if(!p)return;const s_=precioPara(p,ne.cliente);if(s_&&!ip.value)ip.value=r2(s_.v);
+$("#neCode").addEventListener("change",()=>{const p=buscarProducto($("#neCode").value);const ip=$("#nePre");if(!p)return;const s_=precioPara(p,ne.cliente);
+  const of=ofertaDe(p.codigo,{fecha:ne.fecha,excl:ne.editando});
+  if(of){if(ip.value===ip.dataset.auto)ip.value="";ip.dataset.auto="";
+    neMsg(`<b style="color:#c2410c">🔥 En oferta: ${fmt(of.it.precio)}</b> llevando ${Math.max(1,Number(of.it.minimo)||1)} piezas o más${isFinite(of.rest)?` (quedan ${of.rest})`:""}${s_?` · precio normal ${fmt(s_.v)}`:""}. Deja el precio vacío y se pone solo.`,"");return;}
+  if(s_&&(!ip.value||ip.value===ip.dataset.auto)){ip.value=r2(s_.v);ip.dataset.auto=ip.value;}
   neMsg(s_?(s_.de==="cli"?`Último precio que le diste a este cliente: <b>${fmt(s_.v)}</b>`:`Precio de lista: <b>${fmt(s_.v)}</b>`):"Este producto no tiene precio de lista; escribe el precio.","");});
 $("#neScan").onsubmit=e=>{e.preventDefault();const code=$("#neCode").value.trim();if(!code)return $("#neCode").focus();
   const p=buscarProducto(code);if(!p){beep(false);return neMsg(`No encontré <b>${esc(code)}</b> en tus productos.`,"err");}
@@ -3242,8 +3246,8 @@ $("#neScan").onsubmit=e=>{e.preventDefault();const code=$("#neCode").value.trim(
   const i=ne.items.findIndex(x=>String(x.codigo)===String(p.codigo));
   if(i>=0){ne.items[i].cantidad=(Number(ne.items[i].cantidad)||0)+q;ne.items[i].precio=pr;if($("#neDesc").value!=="")ne.items[i].desc=dc;}
   else ne.items.push({codigo:p.codigo,referencia:p.referencia||"",descripcion:p.descripcion||"",unidad:p.unidad||"PZA",cantidad:q,precio:pr,...(dc?{desc:dc}:{})});
-  {const k=ne.items.findIndex(x=>String(x.codigo)===String(p.codigo));if(!($("#nePre").value.trim()))ofAplicarNe(ne.items[k]);}
-  guardarNe();beep(true);pintarNe(p.codigo);neMsg("");$("#neCode").value="";$("#neQty").value=1;$("#nePre").value="";$("#neDesc").value="";$("#neCode").focus();};
+  {const k=ne.items.findIndex(x=>String(x.codigo)===String(p.codigo));const vp=$("#nePre").value.trim();if(!vp||vp===$("#nePre").dataset.auto)ofAplicarNe(ne.items[k]);}
+  guardarNe();beep(true);pintarNe(p.codigo);neMsg("");$("#neCode").value="";$("#neQty").value=1;$("#nePre").value="";$("#nePre").dataset.auto="";$("#neDesc").value="";$("#neCode").focus();};
 $("#neVaciar").onclick=()=>{const b=$("#neVaciar");if(b.dataset.ok){ne=neVacia();cargarCamposNe();guardarNe();neMsg("");pintarNe();b.textContent="Vaciar";delete b.dataset.ok;}
   else{b.dataset.ok=1;b.textContent="¿Vaciar todo?";setTimeout(()=>{b.textContent="Vaciar";delete b.dataset.ok;},3000);}};
 function neDesde(o,btn){if(ne.items.length&&!btn.dataset.ok){btn.dataset.ok=1;btn.textContent="Ya tienes una nota a medio hacer. Toca otra vez para reemplazarla";return;}
