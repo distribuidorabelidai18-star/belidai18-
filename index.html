@@ -3410,7 +3410,7 @@ function neDesde(o,btn){if(ne.items.length&&!btn.dataset.ok){btn.dataset.ok=1;bt
 function neCliDatos(o){const c=cliMaestro(o.cliente,o.rif)||{};return {rif:o.rif||c.rif||"",dir:o.direccion||c.direccionEntrega||c.direccion||"",tel:o.telefono||c.telefonos||""};}
 function neHTML(o){const logo=$(".logo")?.src||"";const cd=neCliDatos(o);const conD=o.items.some(i=>descDe(i)>0);const u=o.items.reduce((s,i)=>s+(Number(i.cantidad)||0),0);const nc=conD?6:5;
   return `<div class="hojaDoc"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:15px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
-    <div style="text-align:right"><div style="font-size:13px;font-weight:700">NOTA DE ENTREGA</div><div class="mono" style="font-size:14px;font-weight:700">N° ${esc(o.numero)}</div><div>Fecha: ${fFecha(o.fecha||hoy())}</div>${o.vence?`<div>Vence: ${fFecha(o.vence)}</div>`:""}</div></div>
+    <div style="text-align:right"><div style="font-size:13px;font-weight:700">GUÍA DE DESPACHO</div><div class="mono" style="font-size:14px;font-weight:700">N° ${esc(o.numero)}</div><div>Fecha: ${fFecha(o.fecha||hoy())}</div>${o.vence?`<div>Vence: ${fFecha(o.vence)}</div>`:""}</div></div>
     <div class="meta"><div><b>Cliente:</b> ${esc(o.cliente||"—")}</div><div><b>RIF / C.I.:</b> ${cd.rif?esc(fmtRif(cd.rif)):"—"}</div>${cd.dir?`<div style="grid-column:1/-1"><b>Dirección:</b> ${esc(cd.dir)}</div>`:""}${cd.tel?`<div><b>Teléfono:</b> ${esc(cd.tel)}</div>`:""}${o.vendedor?`<div><b>Vendedor:</b> ${esc(o.vendedor)}</div>`:""}${o.notas?`<div style="grid-column:1/-1"><b>Condiciones:</b> ${esc(o.notas)}</div>`:""}</div>
     <table><thead><tr><th class="c">#</th><th>Referencia</th><th>Descripción</th><th class="c">Cant.</th><th class="r">Precio c/u</th>${conD?'<th class="c">Desc.</th>':""}<th class="r">Total</th></tr></thead><tbody>
     ${o.items.map((it,i)=>`<tr><td class="c">${i+1}</td><td class="mono">${esc(it.referencia||it.codigo)}</td><td>${esc(it.descripcion)}</td><td class="c"><b>${Number(it.cantidad)||0}</b></td><td class="r">${fmt(it.precio)}</td>${conD?`<td class="c">${descDe(it)?descDe(it).toLocaleString("es-VE")+"%":"—"}</td>`:""}<td class="r">${fmt(subDe(it))}</td></tr>`).join("")}
@@ -3418,12 +3418,13 @@ function neHTML(o){const logo=$(".logo")?.src||"";const cd=neCliDatos(o);const c
     ${o.iva?`<tr><td colspan="${nc}" style="text-align:right">Subtotal</td><td class="r">${fmt(neBase(o))}</td></tr><tr><td colspan="${nc}" style="text-align:right">IVA 16%</td><td class="r">${fmt(neIva(o))}</td></tr>`:""}
     <tr class="tot"><td colspan="3" style="text-align:right">TOTAL</td><td class="c">${u}</td><td></td>${conD?"<td></td>":""}<td class="r">${fmt(neTotal(o))}</td></tr></tbody></table>
     <p style="margin-top:10px;font-size:11px;color:#444">Montos en dólares (USD).</p>
-    <div class="firmas"><div>Entregado por</div><div>Recibido conforme (nombre, C.I. y firma)</div></div></div>`;}
+    <div class="firmas"><div>Entregado por</div><div>Recibido conforme (nombre, C.I. y firma)</div></div>
+    <p style="margin-top:22px;text-align:center;font-size:10px;font-weight:700;letter-spacing:.02em">ESTE DOCUMENTO SERÁ FACTURADO UNA VEZ RECIBIDO Y APROBADO POR EL CLIENTE</p></div>`;}
 function nePDF(J,o){const cd=neCliDatos(o);const conD=o.items.some(i=>descDe(i)>0);
   const d=new J({unit:"mm",format:"a4"}),W=210,H=297,M=14,X1=W-M;let y=M;const logo=$(".logo")?.src||"";
   if(logo){try{d.addImage(logo,"PNG",M,y,30,16);}catch(e){}}const tx=logo?M+34:M;
   d.setFont("helvetica","bold");d.setFontSize(13);d.text("DISTRIBUIDORA BELIDAI 18, C.A.",tx,y+6);d.setFont("helvetica","normal");d.setFontSize(10);d.text("RIF J-50222387-8",tx,y+11);
-  d.setFont("helvetica","bold");d.setFontSize(12);d.text("NOTA DE ENTREGA",X1,y+5,{align:"right"});d.setFont("courier","bold");d.setFontSize(13);d.text("N° "+o.numero,X1,y+11,{align:"right"});
+  d.setFont("helvetica","bold");d.setFontSize(12);d.text("GUÍA DE DESPACHO",X1,y+5,{align:"right"});d.setFont("courier","bold");d.setFontSize(13);d.text("N° "+o.numero,X1,y+11,{align:"right"});
   d.setFont("helvetica","normal");d.setFontSize(10);d.text("Fecha: "+fFecha(o.fecha||hoy()),X1,y+16,{align:"right"});if(o.vence)d.text("Vence: "+fFecha(o.vence),X1,y+21,{align:"right"});
   y+=o.vence?25:20;d.setLineWidth(.6);d.line(M,y,X1,y);y+=6;d.setFontSize(9.5);
   const campo=(lab,val,x,w)=>{d.setFont("helvetica","bold");d.text(lab,x,y);const lw=d.getTextWidth(lab)+1.5;d.setFont("helvetica","normal");const ls=d.splitTextToSize(String(val),w-lw);d.text(ls,x+lw,y);return ls.length;};
@@ -3442,7 +3443,7 @@ function nePDF(J,o){const cd=neCliDatos(o);const conD=o.items.some(i=>descDe(i)>
     if(y+hh>H-M){d.addPage();y=M;cab();d.setFontSize(9);}let x=M;lines.forEach((l,i)=>{const c=cols[i];d.rect(x,y,c.w,hh);d.setFont(c.f||"helvetica",i===iP?"bold":"normal");d.text(l,ax(c,x),y+4.6,ao(c));x+=c.w;});y+=hh;});
   const u=o.items.reduce((s_,i)=>s_+(Number(i.cantidad)||0),0);const lw=cols.slice(0,-1).reduce((s_,c)=>s_+c.w,0),cw=cols.at(-1).w;
   const extra=[...(conD?[["Descuento","- "+fmt(r2(brutoCot(o)-neBase(o)))]]:[]),...(o.iva?[["Subtotal",fmt(neBase(o))],["IVA 16%",fmt(neIva(o))]]:[])];
-  if(y+extra.length*7+8+40>H-M){d.addPage();y=M;}
+  if(y+extra.length*7+8+54>H-M){d.addPage();y=M;}
   d.setDrawColor(140);d.setLineWidth(.2);d.setFont("helvetica","normal");d.setFontSize(9);
   for(const [lab,val] of extra){d.rect(M,y,lw,7);d.rect(M+lw,y,cw,7);d.text(lab,M+lw-2,y+4.6,{align:"right"});d.text(val,X1-1.5,y+4.6,{align:"right"});y+=7;}
   const wT=cols.slice(0,iP).reduce((s_,c)=>s_+c.w,0),xr=M+wT+cols[iP].w,wl=cols.slice(iP+1,-1).reduce((s_,c)=>s_+c.w,0);
@@ -3450,10 +3451,11 @@ function nePDF(J,o){const cd=neCliDatos(o);const conD=o.items.some(i=>descDe(i)>
   d.setFont("helvetica","bold");d.setFontSize(9);d.text("TOTAL",M+wT-2,y+5.3,{align:"right"});d.text(String(u),M+wT+cols[iP].w/2,y+5.3,{align:"center"});d.setFontSize(10);d.text(fmt(neTotal(o)),X1-1.5,y+5.3,{align:"right"});y+=13;
   d.setFont("helvetica","normal");d.setFontSize(8.5);d.setTextColor(80);d.text("Montos en dólares (USD).",M,y);d.setTextColor(0);
   y+=26;d.setLineWidth(.3);const fw=(X1-M-20)/2;d.line(M,y,M+fw,y);d.line(X1-fw,y,X1,y);d.setFontSize(9);d.text("Entregado por",M+fw/2,y+5,{align:"center"});d.text("Recibido conforme (nombre, C.I. y firma)",X1-fw/2,y+5,{align:"center"});
+  y+=16;d.setFont("helvetica","bold");d.setFontSize(8.5);d.text("ESTE DOCUMENTO SERÁ FACTURADO UNA VEZ RECIBIDO Y APROBADO POR EL CLIENTE",W/2,y,{align:"center"});
   return d.output("blob");}
 async function descargarNe(o,msgEl){const say=(t,c)=>{msgEl.hidden=false;msgEl.className="status "+(c||"");msgEl.innerHTML=t;};
   const dl=await window.claude?.use?.("downloads").catch(()=>null);if(!dl)return say("La descarga no está disponible.","err");
-  say('<span class="spin"></span><span>Preparando el PDF…</span>');const nombre=("Nota de entrega "+o.numero+(o.cliente?" "+o.cliente:"")).replace(/[\\/:*?"<>|]/g,"-");
+  say('<span class="spin"></span><span>Preparando el PDF…</span>');const nombre=("Guia de despacho "+o.numero+(o.cliente?" "+o.cliente:"")).replace(/[\\/:*?"<>|]/g,"-");
   try{const J=await cargarJsPDF();await dl.save({filename:nombre+".pdf",data:nePDF(J,o)});say("✓ PDF guardado. Ábrelo para mandarlo por WhatsApp o imprimirlo.","ok");}
   catch(e){say("No se pudo preparar el PDF. Usa Imprimir o intenta de nuevo.","err");}}
 function verNeHoja(o,guardada){const f=guardada?facturas.find(x=>x.id==="p"+o.id):null;const sd=f?saldos().find(x=>x.id===f.id):null;
