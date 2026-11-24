@@ -194,6 +194,7 @@ body:not([data-sec="cxc"]) #cxcActions{display:none!important}
 #ctScan,#neScan{grid-template-columns:6rem minmax(0,1fr) 8rem 6rem auto}
 #neScan label.f{min-width:0}#neScan input{min-width:0;width:100%;box-sizing:border-box}
 @media (max-width:600px){#neScan{grid-template-columns:1fr 1fr 1fr!important}#neScan label:nth-child(2){grid-column:1/-1;grid-row:1}#neScan button{grid-column:1/-1}}
+.neD{width:8.5rem;font-size:.85rem}.neD input{text-align:center}
 .neIva{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink)}.neIva input{width:20px;height:20px;accent-color:var(--accent)}
 #ctScan label.f{min-width:0}#ctScan input{min-width:0;width:100%;box-sizing:border-box}
 @media (max-width:600px){#ctScan{grid-template-columns:1fr 1fr 1fr}#ctScan label:nth-child(2){grid-column:1/-1;grid-row:1}#ctScan button{grid-column:1/-1}}
@@ -638,7 +639,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
         <label class="f">Vencimiento<input id="neVence" type="date"></label>
         <label class="f" style="grid-column:span 2">Condiciones / notas<input id="neNot" autocomplete="off" placeholder="Ej: pago en Zelle, 30 días"></label>
       </div>
-      <div class="toolbar" style="margin-top:10px"><label class="neIva"><input type="checkbox" id="neIva"> Agregar IVA (16%)</label><span class="spacer"></span><span class="note" id="neCliInfo"></span></div></div>
+      <div class="toolbar" style="margin-top:10px"><label class="neIva"><input type="checkbox" id="neIva"> Agregar IVA (16%)</label><label class="f neD">Descuento 1 %<input id="neD1" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></label><label class="f neD">Descuento 2 %<input id="neD2" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></label><span class="spacer"></span><span class="note" id="neCliInfo"></span></div></div>
       <form class="scan" id="neScan" novalidate>
         <label class="f">Piezas<input id="neQty" type="number" min="1" value="1" inputmode="numeric"></label>
         <label class="f">Producto (código, referencia o nombre)<input id="neCode" list="dlProd" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
@@ -1360,7 +1361,7 @@ function renderDetalle(first){
     const li=i=>`<div class="nsl"><span class="num nsq">${Number(i.cantidad)||0} ×</span><span class="nsd">${esc(i.descripcion)}<small>${esc(i.referencia||i.codigo)}${descDe(i)?` · desc. ${descDe(i)}%`:""}</small></span><span class="num">${fmt(subDe(i))}</span></div>`;
     return `<div class="card nsum"><div class="nshead"><div><div class="eyebrow">Nota de entrega</div><div class="mono" style="font-weight:700;font-size:1.05rem">N° ${esc(nt.numero)}</div></div><div class="note" style="text-align:right">${fFecha(nt.fecha)}${nt.vence?`<br>vence ${fFecha(nt.vence)}`:""}</div></div>
       <div class="nslist">${its.slice(0,mx).map(li).join("")}<div id="nsMas" hidden>${its.slice(mx).map(li).join("")}</div>${its.length>mx?`<button type="button" class="linkbtn" id="nsVerMas">Ver ${its.length-mx} producto${its.length-mx>1?"s":""} más</button>`:""}</div>
-      <div class="nstot">${nt.iva?`<div><span>Subtotal</span><span class="num">${fmt(neBase(nt))}</span></div><div><span>IVA 16%</span><span class="num">${fmt(neIva(nt))}</span></div>`:""}<div class="big2"><span>Total · ${u} pieza${u===1?"":"s"}</span><span class="num">${fmt(neTotal(nt))}</span></div></div>
+      <div class="nstot">${neDescFilas(nt).map(([k,v])=>`<div><span>${esc(k)}</span><span class="num">− ${fmt(v)}</span></div>`).join("")}${nt.iva?`<div><span>Subtotal</span><span class="num">${fmt(neBase(nt))}</span></div><div><span>IVA 16%</span><span class="num">${fmt(neIva(nt))}</span></div>`:""}<div class="big2"><span>Total · ${u} pieza${u===1?"":"s"}</span><span class="num">${fmt(neTotal(nt))}</span></div></div>
       <div class="toolbar"><button type="button" id="dNePdf">📄 Ver nota / PDF</button></div></div>`;})()}
   ${f.imagen?`<div class="card"><div class="toolbar"><h3 style="font-size:1.05rem">Foto de la nota</h3><span class="spacer"></span><span class="note">Tócala para verla en grande</span></div><img class="thumb" id="thumb" src="${BLOB}${esc(f.imagen)}" alt="Foto de la nota de entrega" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'note',textContent:'No se pudo mostrar la foto.'}))"></div>`:""}
   <div class="card"><div class="toolbar"><div><h3 style="font-size:1.05rem">Enviar por WhatsApp</h3><div class="note">Le manda al cliente la nota, lo abonado y lo que falta por pagar.</div></div><span class="spacer"></span><button type="button" class="wabtn" id="dWa">💬 Preparar mensaje</button></div><div id="dWaBox" hidden></div></div>
@@ -3123,7 +3124,7 @@ function renderClientes(){
   $("#clVen").textContent=vs.length;
   const fillSel=(el,arr,first)=>{const k=arr.join("|");if(el.dataset.k===k)return;const v=el.value;el.dataset.k=k;el.innerHTML=`<option value="">${first}</option>`+arr.map(x=>`<option>${esc(x)}</option>`).join("");el.value=arr.includes(v)?v:"";};
   fillSel($("#clV"),vs,"Todos los vendedores");fillSel($("#clZ"),zs,"Todas las zonas");
-  $("#clImpBtn").hidden=!esDueno;$("#clNuevo").hidden=!esDueno;
+  $("#clImpBtn").hidden=!esDueno;$("#clNuevo").hidden=!(canWrite&&!esVendedor());
   pintarClientes(D);}
 function clVisibles(D){const q=$("#clQ").value.trim().toLowerCase(),v=$("#clV").value,z=$("#clZ").value,f=$("#clF").value;const qr=normRif(q);
   return clientes.filter(c=>{if(f==="activos"&&c.inactivo)return false;if(f==="inactivos"&&!c.inactivo)return false;if(f==="deuda"&&!deudaDe(c,D))return false;
@@ -3158,7 +3159,7 @@ function abrirFichaCliente(id,editar){
       ${fila("Contacto",esc(c.responsable||""))}${fila("Dirección",esc(c.direccion||""))}${fila("Dir. de entrega",esc(c.direccionEntrega||""))}${fila("Ciudad",esc(c.ciudad||""))}
       ${fila("Cliente desde",c.registro?fFecha(c.registro):"")}${fila("Notas",esc(c.nota||""))}${fila("Estado",c.inactivo?"<b>Inactivo</b>":"")}
     </div>
-    ${esDueno?`<div class="toolbar"><span class="spacer"></span><button type="button" id="fcEditar">Editar</button></div>`:""}`);
+    ${canWrite&&!esVendedor()?`<div class="toolbar"><span class="spacer"></span><button type="button" id="fcEditar">Editar</button></div>`:""}`);
     $("#fcCuenta")&&($("#fcCuenta").onclick=()=>{const k=claveCli(c);const ks=[k,"n:"+kName(c.nombre)];const kk=ks.find(x=>saldos().some(f=>ck(f)===x));if(kk)abrirCliente(kk);});
     $("#fcEditar")&&($("#fcEditar").onclick=()=>abrirFichaCliente(id,true));
     return;}
@@ -3175,7 +3176,7 @@ function abrirFichaCliente(id,editar){
     ${inp("nota","Notas")}
     ${id?`<label class="f" style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="ce_inactivo" ${c.inactivo?"checked":""} style="width:20px;height:20px">Cliente inactivo</label>`:""}
     <div id="ceErr" class="err" hidden></div>
-    <div class="toolbar">${id?'<button type="button" class="danger" id="ceBorrar">Borrar</button>':""}<span class="spacer"></span><button class="primary" type="submit" id="ceOk">Guardar</button></div>
+    <div class="toolbar">${id&&esDueno?'<button type="button" class="danger" id="ceBorrar">Borrar</button>':""}<span class="spacer"></span><button class="primary" type="submit" id="ceOk">Guardar</button></div>
   </form><datalist id="dlCliV">${vs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist><datalist id="dlCliZ">${zs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>`);
   $("#ce_nombre").focus();
   $("#fCli").onsubmit=async e=>{e.preventDefault();const err=$("#ceErr");err.hidden=true;
@@ -3299,7 +3300,7 @@ $("#rpMarcas").onclick=()=>{const marcas=[...new Set(productos.map(marcaDe))].so
 /* ---------- Notas de entrega ---------- */
 var notasEnt=[],loadedNe=false,neTab="nueva";
 function textoCobro(f){const nt=notaDeFactura(f);const L=[`*DISTRIBUIDORA BELIDAI 18, C.A.*`,"",`Hola, ${String(f.cliente||"").trim()}. Le enviamos el estado de su nota de entrega *N° ${f.numero||"—"}* del ${fFecha(f.fecha)}${venceDe(f)?` (vence el ${fFecha(venceDe(f))})`:""}:`,""];
-  if(nt){for(const i of nt.items||[])L.push(`• ${Number(i.cantidad)||0} × ${String(i.descripcion||"").trim()} — ${fmt(subDe(i))}`);if(nt.iva)L.push(`• IVA 16% — ${fmt(neIva(nt))}`);L.push("");}
+  if(nt){for(const i of nt.items||[])L.push(`• ${Number(i.cantidad)||0} × ${String(i.descripcion||"").trim()} — ${fmt(subDe(i))}`);for(const [k,v] of neDescFilas(nt))L.push(`• ${k} — −${fmt(v)}`);if(nt.iva)L.push(`• IVA 16% — ${fmt(neIva(nt))}`);L.push("");}
   L.push(`Total de la nota: ${fmt(f.montoUSD)}`);if(f.abonado>0)L.push(`Abonado: ${fmt(f.abonado)}`);
   L.push(f.saldo>0?`*Saldo pendiente: ${fmt(f.saldo)}*`:`*✓ Esta nota está pagada. ¡Gracias!*`);
   if(f.saldo>0)L.push("","Puede pagar por Zelle, Binance, USDT, efectivo o bolívares a la tasa del día. Por favor envíenos el comprobante por esta vía.","","¡Gracias por su compra!");
@@ -3320,7 +3321,11 @@ var ne=neVacia();
 try{const g=JSON.parse(localStorage.getItem("db18.ne")||"null");if(g&&Array.isArray(g.items))ne={...ne,...g};}catch(e){}
 function guardarNe(){try{localStorage.setItem("db18.ne",JSON.stringify(ne));}catch(e){}}
 const neIdDe=n=>String(n||"").replace(/[^A-Za-z0-9_\-]/g,"");
-const neBase=o=>totalCot(o),neIva=o=>o.iva?r2(neBase(o)*IVA):0,neTotal=o=>r2(neBase(o)+neIva(o));
+/* Dos descuentos generales de la nota, en cascada sobre el total de los productos (ej: 35%, o 30% + 10%). */
+const neDs=o=>[o?.d1,o?.d2].map(v=>Math.min(100,Math.max(0,Number(v)||0)));
+function neDescFilas(o){const f=[];const t=totalCot(o),b=brutoCot(o);if(b-t>0.004)f.push(["Descuento por producto",r2(b-t)]);
+  let base=t;for(const d of neDs(o))if(d>0){const m=r2(base*d/100);f.push(["Descuento "+d.toLocaleString("es-VE")+"%",m]);base=r2(base-m);}return f;}
+const neBase=o=>{let base=totalCot(o);for(const d of neDs(o))if(d>0)base=r2(base-r2(base*d/100));return base;},neIva=o=>o.iva?r2(neBase(o)*IVA):0,neTotal=o=>r2(neBase(o)+neIva(o));
 function neMsg(html,cls){const m=$("#neMsg");m.hidden=!html;m.className="status "+(cls||"");m.innerHTML=html||"";}
 function neSugNumero(){let mx=0,len=0;for(const f of [...facturas,...notasEnt]){const t=String(f.numero||"");if(/^\d{5,}$/.test(t)&&+t>mx){mx=+t;len=t.length;}}return mx?String(mx+1).padStart(len,"0"):"";}
 function cliMaestro(nombre,rif){const r=normRif(rif),n=kName(nombre);
@@ -3338,13 +3343,15 @@ function neAplicarCli(desde){const c=desde==="rif"?cliMaestro("",$("#neRif").val
   guardarNe();neInfoCli();}
 function cargarCamposNe(){if(!ne.fecha)ne.fecha=hoy();
   $("#neNum").value=ne.numero||(ne.editando?"":neSugNumero());if(!ne.numero&&$("#neNum").value)ne.numero=$("#neNum").value;
-  $("#neCli").value=ne.cliente;$("#neRif").value=ne.rif?fmtRif(ne.rif):"";$("#neVen").value=ne.vendedor;$("#neFec").value=ne.fecha;$("#neVence").value=ne.vence||"";$("#neNot").value=ne.notas;$("#neIva").checked=!!ne.iva;
+  $("#neCli").value=ne.cliente;$("#neRif").value=ne.rif?fmtRif(ne.rif):"";$("#neVen").value=ne.vendedor;$("#neFec").value=ne.fecha;$("#neVence").value=ne.vence||"";$("#neNot").value=ne.notas;$("#neIva").checked=!!ne.iva;$("#neD1").value=neDs(ne)[0]||"";$("#neD2").value=neDs(ne)[1]||"";
   $("#neNum").readOnly=!!ne.editando;neInfoCli();}
 [["#neNum","numero"],["#neCli","cliente"],["#neRif","rif"],["#neVen","vendedor"],["#neNot","notas"]].forEach(([s_,k])=>$(s_).addEventListener("input",e=>{ne[k]=e.target.value;guardarNe();if(k==="cliente"||k==="rif")neInfoCli();}));
 $("#neCli").addEventListener("change",()=>neAplicarCli("cli"));$("#neRif").addEventListener("change",()=>neAplicarCli("rif"));
 $("#neFec").onchange=e=>{ne.fecha=e.target.value||hoy();if(!ne._venceManual){ne.vence=venceSegun(cliMaestro(ne.cliente,ne.rif),ne.fecha);$("#neVence").value=ne.vence;}guardarNe();};
 $("#neVence").onchange=e=>{ne.vence=e.target.value;ne._venceManual=true;guardarNe();};
 $("#neIva").onchange=e=>{ne.iva=e.target.checked;guardarNe();totNe();};
+[["#neD1","d1"],["#neD2","d2"]].forEach(([s_,k])=>{const el=$(s_);el.onfocus=()=>el.select();
+  el.oninput=()=>{const v=parseFloat(String(el.value).replace(",","."));ne[k]=v>0?Math.min(100,v):0;guardarNe();totNe();};el.onblur=()=>{el.value=neDs(ne)[k==="d1"?0:1]||"";};});
 function precioPara(p,cliente){const cli=nomK(cliente);
   if(cli){const prev=[...notasEnt,...cotizaciones].filter(c=>nomK(c.cliente)===cli).sort((a,b)=>(b.creado||0)-(a.creado||0));
     for(const c of prev){const it=(c.items||[]).find(i=>String(i.codigo)===String(p.codigo));if(it&&Number(it.precio)>0)return {v:Number(it.precio),de:"cli"};}}
@@ -3372,7 +3379,7 @@ function pintarNe(flash){const el=$("#neItems");if(!el)return;
   totNe();}
 function totNe(){const t=$("#neTot");if(!ne.items.length){t.hidden=true;return;}t.hidden=false;
   const u=ne.items.reduce((s,i)=>s+(Number(i.cantidad)||0),0),sinP=ne.items.filter(i=>!(Number(i.precio)>0)).length;
-  t.innerHTML=`<span class="note">${ne.items.length} producto${ne.items.length>1?"s":""} · ${u} pieza${u===1?"":"s"}${sinP?` · <span style="color:var(--bad)">${sinP} sin precio</span>`:""}</span>${brutoCot(ne)>neBase(ne)?`<span class="note">Descuentos <b style="color:var(--ok)">− ${fmt(r2(brutoCot(ne)-neBase(ne)))}</b></span>`:""}${ne.iva?`<span class="note">Subtotal <b>${fmt(neBase(ne))}</b></span><span class="note">IVA 16% <b>${fmt(neIva(ne))}</b></span>`:""}<span class="eyebrow">Total</span><span class="big">${fmt(neTotal(ne))}</span>`;}
+  t.innerHTML=`<span class="note">${ne.items.length} producto${ne.items.length>1?"s":""} · ${u} pieza${u===1?"":"s"}${sinP?` · <span style="color:var(--bad)">${sinP} sin precio</span>`:""}</span>${neDescFilas(ne).map(([k,v])=>`<span class="note">${esc(k)} <b style="color:var(--ok)">− ${fmt(v)}</b></span>`).join("")}${ne.iva?`<span class="note">Subtotal <b>${fmt(neBase(ne))}</b></span><span class="note">IVA 16% <b>${fmt(neIva(ne))}</b></span>`:""}<span class="eyebrow">Total</span><span class="big">${fmt(neTotal(ne))}</span>`;}
 function renderNe(){if(sec!=="ne")return;
   const dl=$("#dlProd");const k=productos.length+":"+(productos[0]?.id||"");if(dl.dataset.k!==k){dl.dataset.k=k;dl.innerHTML=productos.map(p=>`<option value="${esc(etiqueta(p))}">`).join("");}
   const dc=$("#dlPdCli");const cs=clientesConocidos();if(dc.dataset.k!==String(cs.length)){dc.dataset.k=cs.length;dc.innerHTML=cs.map(c=>`<option value="${esc(c.nombre)}">`).join("");}
@@ -3414,7 +3421,7 @@ function neHTML(o){const logo=$(".logo")?.src||"";const cd=neCliDatos(o);const c
     <div class="meta"><div><b>Cliente:</b> ${esc(o.cliente||"—")}</div><div><b>RIF / C.I.:</b> ${cd.rif?esc(fmtRif(cd.rif)):"—"}</div>${cd.dir?`<div style="grid-column:1/-1"><b>Dirección:</b> ${esc(cd.dir)}</div>`:""}${cd.tel?`<div><b>Teléfono:</b> ${esc(cd.tel)}</div>`:""}${o.vendedor?`<div><b>Vendedor:</b> ${esc(o.vendedor)}</div>`:""}${o.notas?`<div style="grid-column:1/-1"><b>Condiciones:</b> ${esc(o.notas)}</div>`:""}</div>
     <table><thead><tr><th class="c">#</th><th>Referencia</th><th>Descripción</th><th class="c">Cant.</th><th class="r">Precio c/u</th>${conD?'<th class="c">Desc.</th>':""}<th class="r">Total</th></tr></thead><tbody>
     ${o.items.map((it,i)=>`<tr><td class="c">${i+1}</td><td class="mono">${esc(it.referencia||it.codigo)}</td><td>${esc(it.descripcion)}</td><td class="c"><b>${Number(it.cantidad)||0}</b></td><td class="r">${fmt(it.precio)}</td>${conD?`<td class="c">${descDe(it)?descDe(it).toLocaleString("es-VE")+"%":"—"}</td>`:""}<td class="r">${fmt(subDe(it))}</td></tr>`).join("")}
-    ${conD?`<tr><td colspan="${nc}" style="text-align:right">Descuento</td><td class="r">− ${fmt(r2(brutoCot(o)-neBase(o)))}</td></tr>`:""}
+    ${neDescFilas(o).length?`<tr><td colspan="${nc}" style="text-align:right">Total productos</td><td class="r">${fmt(brutoCot(o))}</td></tr>`+neDescFilas(o).map(([k,v])=>`<tr><td colspan="${nc}" style="text-align:right">${esc(k)}</td><td class="r">− ${fmt(v)}</td></tr>`).join(""):""}
     ${o.iva?`<tr><td colspan="${nc}" style="text-align:right">Subtotal</td><td class="r">${fmt(neBase(o))}</td></tr><tr><td colspan="${nc}" style="text-align:right">IVA 16%</td><td class="r">${fmt(neIva(o))}</td></tr>`:""}
     <tr class="tot"><td colspan="3" style="text-align:right">TOTAL</td><td class="c">${u}</td><td></td>${conD?"<td></td>":""}<td class="r">${fmt(neTotal(o))}</td></tr></tbody></table>
     <p style="margin-top:10px;font-size:11px;color:#444">Montos en dólares (USD).</p>
@@ -3442,7 +3449,7 @@ function nePDF(J,o){const cd=neCliDatos(o);const conD=o.items.some(i=>descDe(i)>
     const lines=vals.map((v,i)=>{d.setFont(cols[i].f||"helvetica","normal");return d.splitTextToSize(String(v),cols[i].w-3);});const hh=Math.max(...lines.map(l=>l.length))*4+3;
     if(y+hh>H-M){d.addPage();y=M;cab();d.setFontSize(9);}let x=M;lines.forEach((l,i)=>{const c=cols[i];d.rect(x,y,c.w,hh);d.setFont(c.f||"helvetica",i===iP?"bold":"normal");d.text(l,ax(c,x),y+4.6,ao(c));x+=c.w;});y+=hh;});
   const u=o.items.reduce((s_,i)=>s_+(Number(i.cantidad)||0),0);const lw=cols.slice(0,-1).reduce((s_,c)=>s_+c.w,0),cw=cols.at(-1).w;
-  const extra=[...(conD?[["Descuento","- "+fmt(r2(brutoCot(o)-neBase(o)))]]:[]),...(o.iva?[["Subtotal",fmt(neBase(o))],["IVA 16%",fmt(neIva(o))]]:[])];
+  const dF=neDescFilas(o);const extra=[...(dF.length?[["Total productos",fmt(brutoCot(o))],...dF.map(([k,v])=>[k,"- "+fmt(v)])]:[]),...(o.iva?[["Subtotal",fmt(neBase(o))],["IVA 16%",fmt(neIva(o))]]:[])];
   if(y+extra.length*7+8+54>H-M){d.addPage();y=M;}
   d.setDrawColor(140);d.setLineWidth(.2);d.setFont("helvetica","normal");d.setFontSize(9);
   for(const [lab,val] of extra){d.rect(M,y,lw,7);d.rect(M+lw,y,cw,7);d.text(lab,M+lw-2,y+4.6,{align:"right"});d.text(val,X1-1.5,y+4.6,{align:"right"});y+=7;}
@@ -3484,7 +3491,7 @@ $("#neGuardar").onclick=async()=>{const b=$("#neGuardar");
   delete b.dataset.ok;if(!db)return neMsg("Inicia sesión para guardar.","err");
   b.disabled=true;b.textContent="Guardando…";
   try{const ant=notasEnt.find(n=>n.id===id);const c=cliMaestro(ne.cliente,ne.rif);const rif=normRif(ne.rif)||normRif(c?.rif)||"";
-    const doc={numero,cliente:ne.cliente.trim(),rif,vendedor:ne.vendedor.trim(),fecha:ne.fecha||hoy(),vence:ne.vence||ne.fecha||hoy(),notas:ne.notas.trim(),iva:!!ne.iva,
+    const doc={numero,cliente:ne.cliente.trim(),rif,vendedor:ne.vendedor.trim(),fecha:ne.fecha||hoy(),vence:ne.vence||ne.fecha||hoy(),notas:ne.notas.trim(),iva:!!ne.iva,...(neDs(ne)[0]?{d1:neDs(ne)[0]}:{}),...(neDs(ne)[1]?{d2:neDs(ne)[1]}:{}),
       items:ne.items.map(i=>({codigo:i.codigo,referencia:i.referencia||"",descripcion:i.descripcion||"",unidad:i.unidad||"PZA",cantidad:Number(i.cantidad)||1,precio:r2(i.precio),...(descDe(i)?{desc:descDe(i)}:{}),...(i.oferta?{oferta:i.oferta}:{})})),
       subtotal:neBase(ne),montoIva:neIva(ne),total:neTotal(ne),pedidoId:ne.pedidoId||"",cotizacion:ne.cotizacion||"",creado:ant?.creado||Date.now(),editado:ant?Date.now():null};
     await db.doc("notas/"+id).set(doc);
