@@ -298,6 +298,8 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
 .pvCard .noimg{width:110px;height:140px;border-radius:8px;border:1px dashed var(--line);display:grid;place-items:center;color:var(--muted);font-size:.8rem;text-align:center}
 .pvEst{display:inline-block;font-size:.75rem;font-weight:600;border-radius:999px;padding:2px 9px}
 .pvEst.pendiente{background:#fff4d6;color:#7a5400}.pvEst.aprobado{background:#e1f3e7;color:#1f6b3a}.pvEst.rechazado{background:#fbe3e1;color:#a3302a}
+.badgeN.ok{background:#1f6b3a}
+.repNuevo{display:inline-block;font-size:.7rem;font-weight:700;background:#1f6b3a;color:#fff;border-radius:999px;padding:1px 7px;margin-right:4px}
 .badgeN{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--bad,#a3302a);color:#fff;font-size:.75rem;font-weight:700;margin-left:6px}
 @media (max-width:560px){.pvCard{grid-template-columns:1fr}.pvCard img,.pvCard .noimg{width:100%;height:220px}}
 /* Empleados */
@@ -538,7 +540,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   </div>
 
   <div class="sec" id="sec-rep" hidden>
-    <p class="note" style="margin:0">Los pagos que se cargaron para aprobar. Cuando el dueño los revisa pasan a <b>Aprobados</b> o <b>Rechazados</b>. Toca <b>🧾 Ver / Imprimir</b> para verlo e imprimirlo y anexarlo a la nota del cliente.</p>
+    <p class="note" style="margin:0">Los pagos que se cargaron para aprobar. Cuando el dueño los revisa pasan a <b>Aprobados</b> o <b>Rechazados</b>; los que aprobó o rechazó desde tu última visita salen marcados como <b>Nuevo</b>. Toca <b>🧾 Ver / Imprimir</b> para verlo e imprimirlo y anexarlo a la nota del cliente.</p>
     <div class="toolbar"><div class="chips" role="group" aria-label="Estado" id="repChips"></div><span class="spacer"></span><input id="repQ" type="search" placeholder="Buscar cliente, nota o referencia" aria-label="Buscar pago" style="min-width:14rem"></div>
     <div id="repMsg" class="status" hidden></div>
     <section id="repLista"></section>
@@ -735,7 +737,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   <span class="eyebrow" id="sideTit">Menú</span>
   <button type="button" class="navi" data-sec="mv" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Mis cobros</button>
   <button type="button" class="navi" data-sec="cxc" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Cuentas por cobrar</button>
-  <button type="button" class="navi" data-sec="rep" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Pagos reportados<span class="badgeN" id="repBadge" hidden></span></button>
+  <button type="button" class="navi" data-sec="rep" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Pagos verificados<span class="badgeN" id="repBadge" hidden></span></button>
   <button type="button" class="navi" data-sec="clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7.5 17.5c.8-2 2.5-3 4.5-3s3.7 1 4.5 3"/></svg>Clientes</button>
   <button type="button" class="navi" data-sec="ne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Notas de entrega</button>
   <button type="button" class="navi" data-sec="precios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg>Lista de precios</button>
@@ -1466,7 +1468,7 @@ document.querySelectorAll("[data-eye]").forEach(x=>x.onclick=()=>{verSaldo=!verS
 
 /* ---------- Menú y secciones ---------- */
 let sec="cxc";
-const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",rep:"Pagos reportados",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas"};
+const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",rep:"Pagos verificados",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas"};
 var productos=[],loadedProd=false,pedidos=[],loadedPed=false,cfgPed={prefijo:"P-",inicio:1},pedTab="armar";
 function abrirMenu(){document.body.classList.add("menu-open");$("#btnMenu").setAttribute("aria-expanded","true");}
 function cerrarMenu(){document.body.classList.remove("menu-open");$("#btnMenu").setAttribute("aria-expanded","false");}
@@ -2010,8 +2012,18 @@ $("#btnPorAprobar").onclick=abrirPorAprobar;
 /* ---------- Pagos reportados (Carmen, Skarlet y el dueño) ----------
    Lista de los pagos cargados para aprobar, con su estado. Desde aquí se descarga el recibo para imprimirlo. */
 let repF="pendiente";
-function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;const bd=$("#repBadge");if(bd){bd.hidden=!n;bd.textContent=n;}
+/* Para Carmen y Skarlet: aviso de los pagos que el dueño aprobó o rechazó desde la última vez que entraron. */
+let repPrev=null;
+function repVisto(){try{return Number(localStorage.getItem("db18.repVisto"))||0;}catch(e){return 0;}}
+function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;const bd=$("#repBadge");
+  const ref=sec==="rep"?(repPrev??(repPrev=repVisto())):repVisto();
+  const nuevos=esDueno?[]:pagosVend.filter(x=>x.estado!=="pendiente"&&(x.revisado||0)>ref);
+  if(sec!=="rep")repPrev=null;
+  if(bd){if(esDueno){bd.hidden=!n;bd.textContent=n;bd.classList.remove("ok");bd.title="Por aprobar";}
+    else{const c=sec==="rep"?0:nuevos.length;bd.hidden=!c;bd.textContent=c;bd.classList.add("ok");bd.title="Pagos revisados por el dueño desde tu última visita";}}
   if(sec!=="rep")return;
+  if(!esDueno&&loadedPV)try{localStorage.setItem("db18.repVisto",String(Date.now()));}catch(e){}
+  const nvId=new Set(nuevos.map(x=>x.id));
   const cnt={pendiente:0,aprobado:0,rechazado:0};for(const x of pagosVend)if(cnt[x.estado]!=null)cnt[x.estado]++;
   const ops=[["pendiente","Por aprobar"],["aprobado","Aprobados"],["rechazado","Rechazados"],["todos","Todos"]];
   $("#repChips").innerHTML=ops.map(([k,t])=>`<button type="button" data-rf="${k}" aria-pressed="${k===repF}">${t}${k!=="todos"?` (${cnt[k]})`:` (${pagosVend.length})`}</button>`).join("");
@@ -2022,10 +2034,11 @@ function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;
   const l=pagosVend.filter(x=>(repF==="todos"||x.estado===repF)&&(!q||[x.cliente,x.numero,x.referencia,x.reportadoPor,x.vendedor].some(v=>String(v||"").toLowerCase().includes(q))))
     .sort((a,b)=>(b.revisado||b.creado||0)-(a.revisado||a.creado||0));
   if(!l.length){el.innerHTML=`<div class="list"><div class="empty"><strong>${repF==="pendiente"?"No hay pagos por aprobar":"No hay pagos aquí"}</strong>${q?"<span>Prueba con otra búsqueda.</span>":""}</div></div>`;return;}
-  el.innerHTML=`<div class="list">${l.slice(0,300).map(x=>`<div class="prow" style="grid-template-columns:minmax(0,1fr) auto auto;align-items:center">
+  const nA=nuevos.filter(x=>x.estado==="aprobado").length,nR=nuevos.length-nA;
+  el.innerHTML=(nuevos.length?`<div class="status ok" role="status" style="margin-bottom:8px">✓ Desde tu última visita: ${nA?`<b>${nA}</b> aprobado${nA>1?"s":""}`:""}${nA&&nR?" y ":""}${nR?`<b>${nR}</b> rechazado${nR>1?"s":""}`:""}. Salen marcados como <b>Nuevo</b>.</div>`:"")+`<div class="list">${l.slice(0,300).map(x=>`<div class="prow" style="grid-template-columns:minmax(0,1fr) auto auto;align-items:center">
     <span style="min-width:0" class="lk" role="button" tabindex="0" data-repver="${esc(x.facturaId)}" title="Ver la cuenta de esta nota"><div class="cl" style="white-space:normal">${esc(x.cliente||"")} · Nota ${esc(x.numero||"—")}</div>
       <div class="sub" style="white-space:normal">${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?" · Ref. "+esc(x.referencia):""} · cargado por <b>${esc(x.reportadoPor||x.vendedor||"")}</b>${x.revisado&&x.estado!=="pendiente"?" · revisado "+fFecha(new Date(x.revisado-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)):""}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}</div>
-      <div class="sub" style="margin-top:3px"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span> ${pvMonto(x)}</div></span>
+      <div class="sub" style="margin-top:3px">${nvId.has(x.id)?'<span class="repNuevo">Nuevo</span>':""}<span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span> ${pvMonto(x)}</div></span>
     <span class="num" style="font-weight:600">${fmt(x.montoUSD)}</span>
     <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado!=="rechazado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</span></div>`).join("")}</div>`;
   el.querySelectorAll("[data-repver]").forEach(b=>{const go=()=>{if(facturas.some(f=>f.id===b.dataset.repver))abrirDetalle(b.dataset.repver);else{const m=$("#repMsg");m.hidden=false;m.className="status err";m.textContent="Esa nota ya no existe en cuentas por cobrar.";}};b.onclick=go;b.onkeydown=e=>{if(e.key==="Enter")go();};});
