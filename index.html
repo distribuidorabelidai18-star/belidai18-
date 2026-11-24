@@ -522,6 +522,12 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
     <div class="sec" id="it-movs" hidden><div id="mvLista"></div></div>
   </div>
 
+  <div class="sec" id="sec-rep" hidden>
+    <p class="note" style="margin:0">Los pagos que se cargaron para aprobar. Cuando el dueño los revisa pasan a <b>Aprobados</b> o <b>Rechazados</b>. Toca <b>🧾 Recibo</b> para descargarlo e imprimirlo y anexarlo a la nota del cliente.</p>
+    <div class="toolbar"><div class="chips" role="group" aria-label="Estado" id="repChips"></div><span class="spacer"></span><input id="repQ" type="search" placeholder="Buscar cliente, nota o referencia" aria-label="Buscar pago" style="min-width:14rem"></div>
+    <div id="repMsg" class="status" hidden></div>
+    <section id="repLista"></section>
+  </div>
   <div class="sec" id="sec-mv" hidden>
     <p class="note" style="margin:0" id="mvIntro">Tus notas pendientes por cobrar. Cuando un cliente te pague, presiona <b>Reportar pago</b> en esa nota y sube la foto del comprobante. El dueño lo revisa y lo aprueba.</p>
     <section id="mvRes"></section>
@@ -714,6 +720,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   <span class="eyebrow" id="sideTit">Menú</span>
   <button type="button" class="navi" data-sec="mv" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Mis cobros</button>
   <button type="button" class="navi" data-sec="cxc" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Cuentas por cobrar</button>
+  <button type="button" class="navi" data-sec="rep" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Pagos reportados<span class="badgeN" id="repBadge" hidden></span></button>
   <button type="button" class="navi" data-sec="clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7.5 17.5c.8-2 2.5-3 4.5-3s3.7 1 4.5 3"/></svg>Clientes</button>
   <button type="button" class="navi" data-sec="ne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Notas de entrega</button>
   <button type="button" class="navi" data-sec="precios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg>Lista de precios</button>
@@ -1444,14 +1451,14 @@ document.querySelectorAll("[data-eye]").forEach(x=>x.onclick=()=>{verSaldo=!verS
 
 /* ---------- Menú y secciones ---------- */
 let sec="cxc";
-const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas"};
+const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",rep:"Pagos reportados",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas"};
 var productos=[],loadedProd=false,pedidos=[],loadedPed=false,cfgPed={prefijo:"P-",inicio:1},pedTab="armar";
 function abrirMenu(){document.body.classList.add("menu-open");$("#btnMenu").setAttribute("aria-expanded","true");}
 function cerrarMenu(){document.body.classList.remove("menu-open");$("#btnMenu").setAttribute("aria-expanded","false");}
 $("#btnMenu").onclick=abrirMenu;$("#btnCerrarMenu").onclick=cerrarMenu;$("#menuScrim").onclick=cerrarMenu;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")cerrarMenu();});
 function ir(s){if(window.PERFIL?.rol==="vendedor"){if(s!=="precios")s="mv";}else if(s==="mv")s="cxc";
-  if(!TIT[s]||((s==="prov"||s==="emp")&&!uid)||(s==="ofe"&&!esDueno))s="cxc";sec=s;document.body.dataset.sec=s;
+  if(!TIT[s]||((s==="prov"||s==="emp")&&!uid)||(s==="ofe"&&!esDueno)||(s==="rep"&&esVendedor()))s="cxc";sec=s;document.body.dataset.sec=s;
   for(const k in TIT)$("#sec-"+k).hidden=k!==s;
   $("#titulo").textContent=TIT[s];
   document.querySelectorAll(".side [data-sec]").forEach(b=>b.dataset.sec===s?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current"));
@@ -1984,6 +1991,35 @@ function pintarPorAprobar(){
         await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
       }catch(er){console.error(er);b.disabled=false;b.textContent="✓ Aprobar";fail("No se pudo aprobar. Intenta de nuevo.");}};});}
 $("#btnPorAprobar").onclick=abrirPorAprobar;
+
+/* ---------- Pagos reportados (Carmen, Skarlet y el dueño) ----------
+   Lista de los pagos cargados para aprobar, con su estado. Desde aquí se descarga el recibo para imprimirlo. */
+let repF="pendiente";
+function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;const bd=$("#repBadge");if(bd){bd.hidden=!n;bd.textContent=n;}
+  if(sec!=="rep")return;
+  const cnt={pendiente:0,aprobado:0,rechazado:0};for(const x of pagosVend)if(cnt[x.estado]!=null)cnt[x.estado]++;
+  const ops=[["pendiente","Por aprobar"],["aprobado","Aprobados"],["rechazado","Rechazados"],["todos","Todos"]];
+  $("#repChips").innerHTML=ops.map(([k,t])=>`<button type="button" data-rf="${k}" aria-pressed="${k===repF}">${t}${k!=="todos"?` (${cnt[k]})`:` (${pagosVend.length})`}</button>`).join("");
+  $("#repChips").querySelectorAll("[data-rf]").forEach(b=>b.onclick=()=>{repF=b.dataset.rf;renderRep();});
+  const el=$("#repLista");
+  if(!loadedPV){el.innerHTML='<div class="list"><div class="empty"><span class="spin"></span>Cargando pagos…</div></div>';return;}
+  const q=$("#repQ").value.trim().toLowerCase();
+  const l=pagosVend.filter(x=>(repF==="todos"||x.estado===repF)&&(!q||[x.cliente,x.numero,x.referencia,x.reportadoPor,x.vendedor].some(v=>String(v||"").toLowerCase().includes(q))))
+    .sort((a,b)=>(b.revisado||b.creado||0)-(a.revisado||a.creado||0));
+  if(!l.length){el.innerHTML=`<div class="list"><div class="empty"><strong>${repF==="pendiente"?"No hay pagos por aprobar":"No hay pagos aquí"}</strong>${q?"<span>Prueba con otra búsqueda.</span>":""}</div></div>`;return;}
+  el.innerHTML=`<div class="list">${l.slice(0,300).map(x=>`<div class="prow" style="grid-template-columns:minmax(0,1fr) auto auto;align-items:center">
+    <span style="min-width:0" class="lk" role="button" tabindex="0" data-repver="${esc(x.facturaId)}" title="Ver la cuenta de esta nota"><div class="cl" style="white-space:normal">${esc(x.cliente||"")} · Nota ${esc(x.numero||"—")}</div>
+      <div class="sub" style="white-space:normal">${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?" · Ref. "+esc(x.referencia):""} · cargado por <b>${esc(x.reportadoPor||x.vendedor||"")}</b>${x.revisado&&x.estado!=="pendiente"?" · revisado "+fFecha(new Date(x.revisado-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)):""}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}</div>
+      <div class="sub" style="margin-top:3px"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span> ${pvMonto(x)}</div></span>
+    <span class="num" style="font-weight:600">${fmt(x.montoUSD)}</span>
+    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado!=="rechazado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Recibo</button>`:""}</span></div>`).join("")}</div>`;
+  el.querySelectorAll("[data-repver]").forEach(b=>{const go=()=>{if(facturas.some(f=>f.id===b.dataset.repver))abrirDetalle(b.dataset.repver);else{const m=$("#repMsg");m.hidden=false;m.className="status err";m.textContent="Esa nota ya no existe en cuentas por cobrar.";}};b.onclick=go;b.onkeydown=e=>{if(e.key==="Enter")go();};});
+  el.querySelectorAll("[data-repfoto]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.repfoto);if(x)verImagen(BLOB+x.foto);});
+  el.querySelectorAll("[data-reprec]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.reprec);if(!x)return;
+    const ab=x.estado==="aprobado"&&x.abonoId?abonos.find(a=>a.id===x.abonoId):null;
+    if(ab)pdfRecibo({...ab,reportadoPor:ab.reportadoPor||x.reportadoPor},"abono",$("#repMsg"));else pdfRecibo(x,"pv",$("#repMsg"));});}
+$("#repQ").oninput=()=>renderRep();
+{const _r4=render;render=function(){_r4();renderRep();};}
 
 /* ---------- Página de consultas para clientes (consultas.html) ----------
    Se publican archivos en el almacenamiento público: la tasa del día y, para cada cliente con enlace,
@@ -3782,7 +3818,8 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   if(esVendedor()){canWrite=false;$("#btnNueva").hidden=true;$("#btnProfit").hidden=true;
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;$('.side [data-sec="ofe"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="ofe")ir("ofe");}catch(e){}}
-  db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
+  if(!esVendedor()){$('.side [data-sec="rep"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="rep")ir("rep");}catch(e){}}
+  db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();renderRep();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
   if(canWrite&&!esVendedor())_pubOn=true; // Carmen y Skarlet también actualizan la lista de pedidos al hacer notas
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega, registrar pagos y hacer notas de crédito. Los pagos y las notas de crédito quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
   const timer=setTimeout(()=>{if(!loadedF)banner("Las cuentas están tardando en cargar. Revisa tu conexión.");},10000);
