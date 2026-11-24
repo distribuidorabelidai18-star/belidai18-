@@ -320,6 +320,19 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
 .hojaDoc .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;margin-top:8px}
 .hojaDoc .firmas{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:56px;text-align:center}
 .hojaDoc .firmas div{border-top:1px solid #000;padding-top:6px}
+.recHoja .recCopia{padding:4px 0 10px}
+.recHoja .recCorte{border-top:1.5px dashed #888;text-align:center;font-size:9px;color:#888;margin:14px 0 12px;line-height:0}
+.recHoja .recCorte span{background:#fff;padding:0 8px}
+.recHoja .recEtq{font-size:9px;color:#777;letter-spacing:.04em}
+.recHoja .recAviso{background:#fff3cd;color:#92400e;font-weight:700;font-size:11px;padding:5px 8px;margin-top:8px;border-radius:3px}
+.recHoja .recFilas{display:grid;grid-template-columns:8.5em minmax(0,1fr);gap:3px 10px;margin-top:10px}
+.recHoja .recFilas b{white-space:nowrap}
+.recHoja .recTot{display:grid;grid-template-columns:repeat(3,1fr);margin-top:12px;border:1px solid #888}
+.recHoja .recTot div{text-align:center;padding:6px 4px;border-left:1px solid #888}
+.recHoja .recTot div:first-child{border-left:0;background:#ececec}
+.recHoja .recTot small{display:block;font-size:9px;color:#555;text-transform:uppercase}
+.recHoja .recTot strong{font-size:15px}
+.recHoja .firmas{margin-top:38px}
 .hojaWrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
 .hojaWrap .hojaDoc{min-width:560px;padding:18px}
 @media print{
@@ -327,6 +340,8 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   body{background:#fff!important}
   #printArea{display:block}
   #printArea .hojaDoc{font-size:11pt}
+  #printArea .recHoja{font-size:10pt}
+  #printArea .recHoja .recCopia{break-inside:avoid;page-break-inside:avoid}
   @page{margin:14mm}
 }
 @media (max-width:760px){.provs{grid-template-columns:1fr 1fr}.sec>.toolbar #pEstado{flex:0 0 auto;width:auto}}
@@ -523,7 +538,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   </div>
 
   <div class="sec" id="sec-rep" hidden>
-    <p class="note" style="margin:0">Los pagos que se cargaron para aprobar. Cuando el dueño los revisa pasan a <b>Aprobados</b> o <b>Rechazados</b>. Toca <b>🧾 Recibo</b> para descargarlo e imprimirlo y anexarlo a la nota del cliente.</p>
+    <p class="note" style="margin:0">Los pagos que se cargaron para aprobar. Cuando el dueño los revisa pasan a <b>Aprobados</b> o <b>Rechazados</b>. Toca <b>🧾 Ver / Imprimir</b> para verlo e imprimirlo y anexarlo a la nota del cliente.</p>
     <div class="toolbar"><div class="chips" role="group" aria-label="Estado" id="repChips"></div><span class="spacer"></span><input id="repQ" type="search" placeholder="Buscar cliente, nota o referencia" aria-label="Buscar pago" style="min-width:14rem"></div>
     <div id="repMsg" class="status" hidden></div>
     <section id="repLista"></section>
@@ -1324,7 +1339,7 @@ function renderDetalle(first){
     ${f.moneda==="Bs"?`<div class="note">Nota original: ${fmtBs(f.montoOriginal)} a tasa ${String(f.tasa).replace(".",",")} Bs/$</div>`:""}
   </div>
   ${(()=>{const pv=pagosVend.filter(x=>x.facturaId===f.id&&(x.estado==="pendiente"||x.estado==="rechazado")).sort((a,b)=>(b.creado||0)-(a.creado||0)).slice(0,5);
-    return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}${x.estado==="pendiente"?` <button type="button" class="linkbtn" data-recpv="${esc(x.id)}">🧾 Recibo</button>`:""}</div>`).join("")}</div>`:"";})()}
+    return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}${x.estado==="pendiente"?` <button type="button" class="linkbtn" data-recpv="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</div>`).join("")}</div>`:"";})()}
   ${canWrite&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
     <h3 style="font-size:1.05rem">${esDueno?"Registrar abono":"Registrar pago"}</h3>${esDueno?"":`<div class="note">El pago queda <b>por aprobar</b>: el dueño lo revisa y, al aprobarlo, se descuenta del saldo.</div>`}
     <div class="chips" role="group" aria-label="Forma de pago">${METODOS.map(m=>`<button type="button" data-m="${m.id}" aria-pressed="${m.id===metodoSel}">${esc(m.nombre)}</button>`).join("")}</div>
@@ -1338,7 +1353,7 @@ function renderDetalle(first){
     <div id="aErr" class="err" hidden></div>
     <div class="toolbar"><button class="primary" type="submit" id="aGuardar">${esDueno?"Registrar abono":"Enviar para aprobar"}</button><button type="button" id="aTotal">Pagar saldo completo (${fmt(f.saldo)})</button></div>
   </form>`:f.saldo<=0?`<div class="status ok">✓ Esta cuenta está pagada.</div>`:""}
-  ${msgAbono?`<div class="status ok" role="status" style="flex-wrap:wrap">✓ ${esc(msgAbono)}${ultRecibo?`<button type="button" class="primary" id="recUlt" style="margin-left:auto">🧾 Imprimir ${ultRecibo.t==="nc"?"nota de crédito":"recibo"}</button>`:""}</div>`:""}
+  ${msgAbono?`<div class="status ok" role="status" style="flex-wrap:wrap">✓ ${esc(msgAbono)}${ultRecibo?`<button type="button" class="primary" id="recUlt" style="margin-left:auto">🧾 Ver / Imprimir ${ultRecibo.t==="nc"?"nota de crédito":"recibo"}</button>`:""}</div>`:""}
   ${(()=>{const nt=notaDeFactura(f);if(!nt)return "";const its=nt.items||[];const mx=5;const u=its.reduce((a,i)=>a+(Number(i.cantidad)||0),0);
     const li=i=>`<div class="nsl"><span class="num nsq">${Number(i.cantidad)||0} ×</span><span class="nsd">${esc(i.descripcion)}<small>${esc(i.referencia||i.codigo)}${descDe(i)?` · desc. ${descDe(i)}%`:""}</small></span><span class="num">${fmt(subDe(i))}</span></div>`;
     return `<div class="card nsum"><div class="nshead"><div><div class="eyebrow">Nota de entrega</div><div class="mono" style="font-weight:700;font-size:1.05rem">N° ${esc(nt.numero)}</div></div><div class="note" style="text-align:right">${fFecha(nt.fecha)}${nt.vence?`<br>vence ${fFecha(nt.vence)}`:""}</div></div>
@@ -1355,7 +1370,7 @@ function renderDetalle(first){
     ${mis.length?`<div>${mis.map(a=>{const m=METODOS.find(x=>x.id===a.metodo);return `<div class="ab"><span class="tag">${esc(m?.nombre||a.metodo)}</span>
       <span style="min-width:0"><div class="sub">${fFecha(a.fecha)}${a.referencia?" · Ref. "+esc(a.referencia):""}</div>${a.metodo==="bs"?`<div class="sub">${fmtBs(a.montoOriginal)} a ${String(a.tasa).replace(".",",")} Bs/$</div>`:""}</span>
       <span class="num">${fmt(a.montoUSD)}</span>
-      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end"><button type="button" data-rec="${esc(a.id)}" aria-label="Recibo para imprimir">🧾 Recibo</button>${canWrite&&esDueno?`<button class="danger" type="button" data-del="${esc(a.id)}" aria-label="Borrar abono">Borrar</button>`:""}</span></div>`}).join("")}</div>`:'<div class="note">Todavía no hay abonos en esta nota.</div>'}
+      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end"><button type="button" data-rec="${esc(a.id)}" aria-label="Ver o imprimir el recibo">🧾 Ver / Imprimir</button>${canWrite&&esDueno?`<button class="danger" type="button" data-del="${esc(a.id)}" aria-label="Borrar abono">Borrar</button>`:""}</span></div>`}).join("")}</div>`:'<div class="note">Todavía no hay abonos en esta nota.</div>'}
     <div id="confAb"></div><div id="recMsg" class="status" hidden></div>
   </div>
   ${canWrite&&esDueno?`<div class="toolbar" style="margin:0"><button type="button" id="numF">Cambiar número de nota</button><button class="danger" type="button" id="delF">Borrar esta nota y sus abonos</button></div><div id="numBox"></div><div id="confF"></div>`:""}`);
@@ -1365,9 +1380,9 @@ function renderDetalle(first){
   {const nt=notaDeFactura(f);if(nt){$("#dNePdf").onclick=()=>verNeHoja(nt,true);$("#nsVerMas")&&($("#nsVerMas").onclick=()=>{$("#nsMas").hidden=false;$("#nsVerMas").remove();});}}
   $("#dWa").onclick=()=>abrirWaCobro(f);
   ncBind(f);
-  document.querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>pdfRecibo(abonos.find(x=>x.id===b.dataset.rec),"abono",$("#recMsg")));
-  document.querySelectorAll("[data-recpv]").forEach(b=>b.onclick=()=>pdfRecibo(pagosVend.find(x=>x.id===b.dataset.recpv),"pv",$("#recMsg")));
-  $("#recUlt")&&($("#recUlt").onclick=()=>{const u=ultRecibo;const l=u.t==="nc"?notasCred:u.t==="pv"?pagosVend:abonos;pdfRecibo(l.find(x=>x.id===u.id)||u.doc,u.t,$("#recMsg"));});
+  document.querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>verRecibo(abonos.find(x=>x.id===b.dataset.rec),"abono"));
+  document.querySelectorAll("[data-recpv]").forEach(b=>b.onclick=()=>verRecibo(pagosVend.find(x=>x.id===b.dataset.recpv),"pv"));
+  $("#recUlt")&&($("#recUlt").onclick=()=>{const u=ultRecibo;const l=u.t==="nc"?notasCred:u.t==="pv"?pagosVend:abonos;verRecibo(l.find(x=>x.id===u.id)||u.doc,u.t);});
   for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
     try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
   $("#verHist").onclick=()=>abrirCliente(ck(f));
@@ -2012,12 +2027,12 @@ function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;
       <div class="sub" style="white-space:normal">${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?" · Ref. "+esc(x.referencia):""} · cargado por <b>${esc(x.reportadoPor||x.vendedor||"")}</b>${x.revisado&&x.estado!=="pendiente"?" · revisado "+fFecha(new Date(x.revisado-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)):""}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}</div>
       <div class="sub" style="margin-top:3px"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span> ${pvMonto(x)}</div></span>
     <span class="num" style="font-weight:600">${fmt(x.montoUSD)}</span>
-    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado!=="rechazado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Recibo</button>`:""}</span></div>`).join("")}</div>`;
+    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado!=="rechazado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</span></div>`).join("")}</div>`;
   el.querySelectorAll("[data-repver]").forEach(b=>{const go=()=>{if(facturas.some(f=>f.id===b.dataset.repver))abrirDetalle(b.dataset.repver);else{const m=$("#repMsg");m.hidden=false;m.className="status err";m.textContent="Esa nota ya no existe en cuentas por cobrar.";}};b.onclick=go;b.onkeydown=e=>{if(e.key==="Enter")go();};});
   el.querySelectorAll("[data-repfoto]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.repfoto);if(x)verImagen(BLOB+x.foto);});
   el.querySelectorAll("[data-reprec]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.reprec);if(!x)return;
     const ab=x.estado==="aprobado"&&x.abonoId?abonos.find(a=>a.id===x.abonoId):null;
-    if(ab)pdfRecibo({...ab,reportadoPor:ab.reportadoPor||x.reportadoPor},"abono",$("#repMsg"));else pdfRecibo(x,"pv",$("#repMsg"));});}
+    if(ab)verRecibo({...ab,reportadoPor:ab.reportadoPor||x.reportadoPor},"abono");else verRecibo(x,"pv");});}
 $("#repQ").oninput=()=>renderRep();
 {const _r4=render;render=function(){_r4();renderRep();};}
 
@@ -2093,10 +2108,10 @@ function ncCard(f){const l=notasCred.filter(c=>c.facturaId===f.id).sort((a,b)=>(
     ${l.length?l.map(c=>`<div class="ab" style="grid-template-columns:auto minmax(0,1fr) auto auto${c.estado==="rechazada"?";opacity:.55":""}"><span class="tag">${esc(c.numero||"NC")}</span>
       <span style="min-width:0"><div class="sub">${c.estado==="pendiente"?'<b style="color:var(--warn)">⏳ Por aprobar</b> · ':c.estado==="rechazada"?'<b style="color:var(--bad)">Rechazada</b> · ':""}${fFecha(c.fecha)} · ${esc(ncMotivo(c.motivo))}${c.creadoPor?" · por "+esc(String(c.creadoPor).split("@")[0]):""}</div>${(c.items||[]).length?`<div class="sub">${c.items.map(i=>`${Number(i.cantidad)} × ${esc(i.referencia||i.codigo)}`).join(", ")}${c.inventario?(c.estado==="pendiente"?" · vuelve al inventario al aprobarla":c.estado==="rechazada"?"":" · volvió al inventario"):""}</div>`:""}${c.detalle?`<div class="sub">${esc(c.detalle)}</div>`:""}</span>
       <span class="num">${fmt(c.montoUSD)}</span>
-      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${c.estado==="rechazada"?"":`<button type="button" data-ncrec="${esc(c.id)}" aria-label="Nota de crédito para imprimir">🧾 Imprimir</button>`}${c.estado==="pendiente"?(esDueno?`<button type="button" class="primary" data-ncok="${esc(c.id)}">Aprobar</button><button type="button" data-ncno="${esc(c.id)}">Rechazar</button>`:""):c.estado==="rechazada"?"":`<button type="button" data-ncpdf="${esc(c.id)}" aria-label="PDF de la nota de crédito">PDF</button>`}${esDueno?`<button class="danger" type="button" data-ncdel="${esc(c.id)}">Borrar</button>`:""}</span></div>`).join(""):'<div class="note">Para devoluciones de mercancía, descuentos o errores de precio. Baja el saldo de esta nota.</div>'}<div id="ncMsg" class="status" hidden></div></div>`;}
+      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${c.estado==="rechazada"?"":`<button type="button" data-ncrec="${esc(c.id)}" aria-label="Ver o imprimir la nota de crédito">🧾 Ver / Imprimir</button>`}${c.estado==="pendiente"?(esDueno?`<button type="button" class="primary" data-ncok="${esc(c.id)}">Aprobar</button><button type="button" data-ncno="${esc(c.id)}">Rechazar</button>`:""):c.estado==="rechazada"?"":`<button type="button" data-ncpdf="${esc(c.id)}" aria-label="PDF de la nota de crédito">PDF</button>`}${esDueno?`<button class="danger" type="button" data-ncdel="${esc(c.id)}">Borrar</button>`:""}</span></div>`).join(""):'<div class="note">Para devoluciones de mercancía, descuentos o errores de precio. Baja el saldo de esta nota.</div>'}<div id="ncMsg" class="status" hidden></div></div>`;}
 function ncBind(f){$("#ncNueva")&&($("#ncNueva").onclick=()=>abrirNC(f.id));
   document.querySelectorAll("[data-ncpdf]").forEach(b=>b.onclick=()=>{const c=notasCred.find(x=>x.id===b.dataset.ncpdf);if(c)pdfNC(c,null);});
-  document.querySelectorAll("[data-ncrec]").forEach(b=>b.onclick=()=>pdfRecibo(notasCred.find(x=>x.id===b.dataset.ncrec),"nc",$("#ncMsg")));
+  document.querySelectorAll("[data-ncrec]").forEach(b=>b.onclick=()=>verRecibo(notasCred.find(x=>x.id===b.dataset.ncrec),"nc"));
   document.querySelectorAll("[data-ncdel]").forEach(b=>b.onclick=async()=>{if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Seguro?";return;}
     b.disabled=true;try{await db.doc("notasCredito/"+b.dataset.ncdel).delete();}catch(e){b.disabled=false;b.textContent="Error";}});
   ncBindAprobar(document);}
@@ -2200,6 +2215,38 @@ function pdfRecibo(x,tipo,msgEl){if(!x)return;const {f,pend,antes,despues}=recib
     d.setFontSize(7);d.setTextColor(120);d.text("- - - cortar aquí - - -",W/2,147,{align:"center"});d.setTextColor(0);
     copia(154,"COPIA · ARCHIVO");
     return d.output("blob");},msgEl||null);}
+/* Vista previa del recibo (pago o nota de crédito) con botones Imprimir y Descargar PDF.
+   Hoja con dos copias iguales (cliente / archivo) y línea para cortar. */
+function reciboHTML(x,tipo){const {f,pend,antes,despues}=reciboDatos(x,tipo);const esNC=tipo==="nc";const logo=$(".logo")?.src||"";
+  const fila=(k,v)=>`<b>${esc(k)}</b><span>${esc(String(v||"—"))}</span>`;
+  const filas=[fila("Cliente:",x.cliente||f.cliente)];
+  if(x.rif||f.rif)filas.push(fila("RIF / C.I.:",fmtRif(x.rif||f.rif)));
+  filas.push(fila("Nota de entrega:","N° "+(f.numero||x.numero||x.notaNumero||"—")+(f.fecha?"  del "+fFecha(f.fecha):"")+(Number(f.montoUSD)?"  ·  total "+fmtP(f.montoUSD):"")));
+  if(f.vendedor||x.vendedor)filas.push(fila("Vendedor:",f.vendedor||x.vendedor));
+  if(esNC){filas.push(fila("Motivo:",ncMotivo(x.motivo)));
+    if((x.items||[]).length)filas.push(fila("Devolución:",x.items.map(i=>`${Number(i.cantidad)} × ${i.referencia||i.codigo} ${i.descripcion||""} (${fmtP(i.precioUnit)} c/u)`).join("; ")));
+    if(x.detalle)filas.push(fila("Detalle:",x.detalle));}
+  else{filas.push(fila("Forma de pago:",pvMet(x.metodo)));
+    if(x.moneda==="Bs")filas.push(fila("Monto en Bs:",fmtBs(x.montoOriginal)+"  a tasa "+String(x.tasa).replace(".",",")+" Bs/$"));
+    if(x.referencia)filas.push(fila("Referencia:",x.referencia));
+    if(x.reportadoPor)filas.push(fila("Recibido por:",x.reportadoPor));}
+  const copia=etq=>`<div class="recCopia"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:14px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:700">${esNC?"NOTA DE CRÉDITO":"RECIBO DE PAGO"}</div><div>${esNC?"N° "+esc(x.numero||"")+" · ":""}Fecha: ${fFecha(x.fecha||hoy())}</div><div class="recEtq">${etq}</div></div></div>
+    ${pend?`<div class="recAviso">${esNC?"PENDIENTE DE APROBACIÓN: el saldo se ajusta cuando la administración la apruebe.":"PAGO RECIBIDO, POR CONFIRMAR: se descuenta del saldo al verificarse."}</div>`:""}
+    <div class="recFilas">${filas.join("")}</div>
+    <div class="recTot"><div><small>${esNC?"Monto nota de crédito":"Monto pagado"}</small><strong>${fmtP(x.montoUSD)}</strong></div><div><small>Saldo anterior</small><strong>${fmtP(antes)}</strong></div><div><small>${pend?"Saldo al aprobarse":"Saldo pendiente"}</small><strong>${fmtP(despues)}</strong></div></div>
+    <div class="firmas"><div>Por Distribuidora Belidai 18</div><div>Cliente (nombre y firma)</div></div></div>`;
+  return `<div class="hojaDoc recHoja">${copia("ORIGINAL · CLIENTE")}<div class="recCorte"><span>✂ cortar aquí</span></div>${copia("COPIA · ARCHIVO")}</div>`;}
+function verRecibo(x,tipo){if(!x)return;const esNC=tipo==="nc";const {f}=reciboDatos(x,tipo);const volver=detId&&facturas.some(z=>z.id===detId)?detId:null;
+  panel(`<div class="ph"><div style="min-width:0"><div class="eyebrow">${esc(x.cliente||f.cliente||"")}${f.numero?" · Nota "+esc(f.numero):""}</div><h2>${esNC?"Nota de crédito "+esc(x.numero||""):"Recibo de pago"}</h2></div><button class="ghost" type="button" id="rvX" aria-label="${volver?"Volver a la nota":"Cerrar"}">✕</button></div>
+  <div class="toolbar"><button class="primary" type="button" id="rvPrint">🖨 Imprimir</button><button type="button" id="rvPdf">Descargar PDF</button>${volver?'<span class="spacer"></span><button type="button" id="rvVolver">← Volver a la nota</button>':""}</div>
+  <div id="rvMsg" class="status" hidden></div>
+  <div class="hojaWrap">${reciboHTML(x,tipo)}</div>
+  <p class="note" style="margin:0">Sale en una hoja con dos copias: una para el cliente y otra para anexar a la carpeta. Si "Imprimir" no abre nada en tu teléfono, usa "Descargar PDF" y lo imprimes o lo mandas por WhatsApp desde ahí.</p>`);
+  $(".panel").style.width="min(860px,100%)";
+  const atras=()=>volver?abrirDetalle(volver):cerrar();$("#rvX").onclick=atras;$("#rvVolver")&&($("#rvVolver").onclick=atras);
+  $("#rvPrint").onclick=()=>{$("#printArea").innerHTML=reciboHTML(x,tipo);try{window.print();}catch(e){}};
+  $("#rvPdf").onclick=()=>pdfRecibo(x,tipo,$("#rvMsg"));}
 function abrirNCLista(){panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Notas de crédito</h2><div class="note">Devoluciones, descuentos y ajustes. Bajan el saldo del cliente, pero no cuentan como cobranza ni para comisiones.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
   <div class="card" style="display:grid;gap:8px"><b>Hacer una nota de crédito</b><input id="ncBus" type="search" placeholder="Busca la nota por número o cliente" autocomplete="off"><div id="ncRes"></div></div>
   <div id="ncLista"></div><div id="ncMsg"></div>`);
