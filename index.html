@@ -959,18 +959,19 @@ const SUPABASE_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
      Registra este teléfono para recibir notificaciones aunque el programa esté cerrado. */
   const VAPID_PUB="BFmI5YC3uqX8RUM4eqLHzBUhhZjGeCvu0t4Hd6MXxOdmPw2NTgbw7BpOGeaavNais0ez3emhPY6q_Cg82R1CcOQ";
   async function activarAvisos(){
-    const avisar=t=>alert(t);
+    const avisar=t=>alert(t);let paso="permiso";
     try{
       if(Notification.permission==="denied")return avisar("Las notificaciones están bloqueadas para este programa. Ve a Ajustes del teléfono → Apps → Chrome → Notificaciones (o toca el candado junto a la dirección) y permítelas. Luego vuelve a tocar este botón.");
       const perm=await Notification.requestPermission();if(perm!=="granted")return avisar("No se activaron los avisos porque no se dio el permiso.");
-      const reg=await navigator.serviceWorker.register("./sw.js");await navigator.serviceWorker.ready;
+      paso="registrar sw";const reg=await navigator.serviceWorker.register("./sw.js");await navigator.serviceWorker.ready;paso="suscribir";
       const key=Uint8Array.from(atob(VAPID_PUB.replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-VAPID_PUB.length%4)%4)),c=>c.charCodeAt(0));
       let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
-      const j=sub.toJSON();
+      const j=sub.toJSON();paso="guardar en Supabase";
       const {error}=await sb.from("push_subs").upsert({endpoint:j.endpoint,sub:j,email:perfil.email});
-      if(error)throw error;
+      if(error)throw error;paso="mostrar aviso";
       await reg.showNotification("✅ Avisos activados",{body:"Te avisaré aquí cuando haya un pago o una nota de crédito por aprobar.",icon:"icono-192.png",badge:"badge-96.png"});
-    }catch(e){console.error(e);avisar("No se pudieron activar los avisos"+(/push_subs|relation|policy/i.test(e?.message||"")?": falta pegar el archivo de avisos en Supabase.":". Revisa la conexión e intenta de nuevo."));}}
+    }catch(e){console.error(e);const m=String(e?.message||e||"");
+      avisar("No se pudieron activar los avisos."+(/push_subs|relation|policy/i.test(m)?" Falta pegar el archivo de avisos en Supabase.":"")+"\n\nPaso: "+paso+"\nDetalle: "+(e?.name||"")+" "+m.slice(0,200));}}
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
   /* ---------- Importar el respaldo exportado desde la versión de Claude ---------- */
