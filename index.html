@@ -2183,7 +2183,7 @@ function pdfNC(c,msgEl){const f=facturas.find(x=>x.id===c.facturaId)||{};
     const sal=saldos().find(x=>x.id===c.facturaId);d.setFontSize(9.5);d.setTextColor(60,60,60);
     d.text(`Este monto se descuenta del saldo de la nota N° ${c.notaNumero||f.numero||""}.${sal?" Saldo actual de la nota: "+fmtP(sal.saldo)+".":""}`,s.M,s.y);return d.output("blob");},msgEl||$("#ncMsg")||null);}
 /* ---------- Recibos imprimibles (pago o nota de crédito) ----------
-   Hoja A4 con dos copias iguales (cliente / empresa) separadas por una línea para cortar; se engrapa a la nota del cliente. */
+   Media hoja (A5 horizontal) con una copia; se engrapa a la nota del cliente. */
 function reciboDatos(x,tipo){const f=facturas.find(z=>z.id===x.facturaId)||{};const tot=Number(f.montoUSD)||0;
   const antesDe=c=>{let p=Number(f.pagadoPrevio)||0;for(const a of abonos)if(a.facturaId===f.id&&a.id!==x.id&&(a.creado||0)<(c||0))p+=Number(a.montoUSD)||0;
     for(const n of ncOk())if(n.facturaId===f.id&&n.id!==x.id&&(n.creado||0)<(c||0))p+=Number(n.montoUSD)||0;return r2(tot-p);};
@@ -2193,14 +2193,14 @@ function reciboDatos(x,tipo){const f=facturas.find(z=>z.id===x.facturaId)||{};co
   return {f,pend,antes:r2(antes),despues:r2(Math.max(0,antes-(Number(x.montoUSD)||0)))};}
 function pdfRecibo(x,tipo,msgEl){if(!x)return;const {f,pend,antes,despues}=reciboDatos(x,tipo);const esNC=tipo==="nc";
   const nom=(esNC?"Nota de credito ":"Recibo de pago ")+(esNC?(x.numero||""):(f.numero||x.numero||""))+" "+String(x.cliente||f.cliente||"").slice(0,30);
-  guardarArchivo(nom.replace(/[\\/:*?"<>|]/g,"-").trim(),J=>{const d=new J({unit:"mm",format:"a4"}),W=210,M=14,X1=W-M;const logo=$(".logo")?.src||"";
+  guardarArchivo(nom.replace(/[\\/:*?"<>|]/g,"-").trim(),J=>{const d=new J({unit:"mm",format:"a5",orientation:"landscape"}),W=210,M=12,X1=W-M;const logo=$(".logo")?.src||"";
     const copia=(y0,etq)=>{let y=y0;
       if(logo){try{d.addImage(logo,"PNG",M,y,26,14);}catch(e){}}const tx=logo?M+30:M;
       d.setTextColor(0);d.setFont("helvetica","bold");d.setFontSize(12);d.text("DISTRIBUIDORA BELIDAI 18, C.A.",tx,y+5);
       d.setFont("helvetica","normal");d.setFontSize(9);d.text("RIF J-50222387-8",tx,y+10);
       d.setFont("helvetica","bold");d.setFontSize(13);d.text(esNC?"NOTA DE CRÉDITO":"RECIBO DE PAGO",X1,y+5,{align:"right"});
       d.setFont("helvetica","normal");d.setFontSize(9);d.text((esNC?"N° "+(x.numero||"")+" · ":"")+"Fecha: "+fFecha(x.fecha||hoy()),X1,y+10,{align:"right"});
-      d.setFontSize(7.5);d.setTextColor(110);d.text(etq,X1,y+14,{align:"right"});d.setTextColor(0);
+      if(etq){d.setFontSize(7.5);d.setTextColor(110);d.text(etq,X1,y+14,{align:"right"});}d.setTextColor(0);
       y+=17;d.setLineWidth(.5);d.line(M,y,X1,y);y+=6;
       if(pend){d.setFillColor(255,243,205);d.rect(M,y-4,X1-M,7,"F");d.setFont("helvetica","bold");d.setFontSize(9);d.setTextColor(146,64,14);
         d.text(esNC?"PENDIENTE DE APROBACIÓN: el saldo se ajusta cuando la administración la apruebe.":"PAGO RECIBIDO, POR CONFIRMAR: se descuenta del saldo al verificarse.",M+2,y+0.8);d.setTextColor(0);y+=8;}
@@ -2223,13 +2223,10 @@ function pdfRecibo(x,tipo,msgEl){if(!x)return;const {f,pend,antes,despues}=recib
       y+=24;d.setLineWidth(.3);d.setDrawColor(0);const sw=(X1-M-20)/2;
       d.line(M,y,M+sw,y);d.line(X1-sw,y,X1,y);d.setFont("helvetica","normal");d.setFontSize(8.5);
       d.text("Por Distribuidora Belidai 18",M+sw/2,y+4,{align:"center"});d.text("Cliente (nombre y firma)",X1-sw/2,y+4,{align:"center"});};
-    copia(12,"ORIGINAL · CLIENTE");
-    d.setDrawColor(120);d.setLineWidth(.3);try{d.setLineDashPattern([2,2],0);}catch(e){}d.line(6,148.5,W-6,148.5);try{d.setLineDashPattern([],0);}catch(e){}
-    d.setFontSize(7);d.setTextColor(120);d.text("- - - cortar aquí - - -",W/2,147,{align:"center"});d.setTextColor(0);
-    copia(154,"COPIA · ARCHIVO");
+    copia(10,"");
     return d.output("blob");},msgEl||null);}
 /* Vista previa del recibo (pago o nota de crédito) con botones Imprimir y Descargar PDF.
-   Hoja con dos copias iguales (cliente / archivo) y línea para cortar. */
+   Una sola copia en media hoja (A5 horizontal). */
 function reciboHTML(x,tipo){const {f,pend,antes,despues}=reciboDatos(x,tipo);const esNC=tipo==="nc";const logo=$(".logo")?.src||"";
   const fila=(k,v)=>`<b>${esc(k)}</b><span>${esc(String(v||"—"))}</span>`;
   const filas=[fila("Cliente:",x.cliente||f.cliente)];
@@ -2244,21 +2241,24 @@ function reciboHTML(x,tipo){const {f,pend,antes,despues}=reciboDatos(x,tipo);con
     if(x.referencia)filas.push(fila("Referencia:",x.referencia));
     if(x.reportadoPor)filas.push(fila("Recibido por:",x.reportadoPor));}
   const copia=etq=>`<div class="recCopia"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:14px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
-    <div style="text-align:right"><div style="font-size:14px;font-weight:700">${esNC?"NOTA DE CRÉDITO":"RECIBO DE PAGO"}</div><div>${esNC?"N° "+esc(x.numero||"")+" · ":""}Fecha: ${fFecha(x.fecha||hoy())}</div><div class="recEtq">${etq}</div></div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:700">${esNC?"NOTA DE CRÉDITO":"RECIBO DE PAGO"}</div><div>${esNC?"N° "+esc(x.numero||"")+" · ":""}Fecha: ${fFecha(x.fecha||hoy())}</div>${etq?`<div class="recEtq">${etq}</div>`:""}</div></div>
     ${pend?`<div class="recAviso">${esNC?"PENDIENTE DE APROBACIÓN: el saldo se ajusta cuando la administración la apruebe.":"PAGO RECIBIDO, POR CONFIRMAR: se descuenta del saldo al verificarse."}</div>`:""}
     <div class="recFilas">${filas.join("")}</div>
     <div class="recTot"><div><small>${esNC?"Monto nota de crédito":"Monto pagado"}</small><strong>${fmtP(x.montoUSD)}</strong></div><div><small>Saldo anterior</small><strong>${fmtP(antes)}</strong></div><div><small>${pend?"Saldo al aprobarse":"Saldo pendiente"}</small><strong>${fmtP(despues)}</strong></div></div>
     <div class="firmas"><div>Por Distribuidora Belidai 18</div><div>Cliente (nombre y firma)</div></div></div>`;
-  return `<div class="hojaDoc recHoja">${copia("ORIGINAL · CLIENTE")}<div class="recCorte"><span>✂ cortar aquí</span></div>${copia("COPIA · ARCHIVO")}</div>`;}
+  return `<div class="hojaDoc recHoja">${copia("")}</div>`;}
 function verRecibo(x,tipo){if(!x)return;const esNC=tipo==="nc";const {f}=reciboDatos(x,tipo);const volver=detId&&facturas.some(z=>z.id===detId)?detId:null;
   panel(`<div class="ph"><div style="min-width:0"><div class="eyebrow">${esc(x.cliente||f.cliente||"")}${f.numero?" · Nota "+esc(f.numero):""}</div><h2>${esNC?"Nota de crédito "+esc(x.numero||""):"Recibo de pago"}</h2></div><button class="ghost" type="button" id="rvX" aria-label="${volver?"Volver a la nota":"Cerrar"}">✕</button></div>
   <div class="toolbar"><button class="primary" type="button" id="rvPrint">🖨 Imprimir</button><button type="button" id="rvPdf">Descargar PDF</button>${volver?'<span class="spacer"></span><button type="button" id="rvVolver">← Volver a la nota</button>':""}</div>
   <div id="rvMsg" class="status" hidden></div>
   <div class="hojaWrap">${reciboHTML(x,tipo)}</div>
-  <p class="note" style="margin:0">Sale en una hoja con dos copias: una para el cliente y otra para anexar a la carpeta. Si "Imprimir" no abre nada en tu teléfono, usa "Descargar PDF" y lo imprimes o lo mandas por WhatsApp desde ahí.</p>`);
+  <p class="note" style="margin:0">Sale en media hoja. Imprímelo dos veces si necesitas una copia para el cliente y otra para la carpeta. Si "Imprimir" no abre nada en tu teléfono, usa "Descargar PDF" y lo imprimes o lo mandas por WhatsApp desde ahí.</p>`);
   $(".panel").style.width="min(860px,100%)";
   const atras=()=>volver?abrirDetalle(volver):cerrar();$("#rvX").onclick=atras;$("#rvVolver")&&($("#rvVolver").onclick=atras);
-  $("#rvPrint").onclick=()=>{$("#printArea").innerHTML=reciboHTML(x,tipo);try{window.print();}catch(e){}};
+  $("#rvPrint").onclick=()=>{$("#printArea").innerHTML=reciboHTML(x,tipo);
+    const st=document.createElement("style");st.id="recPage";st.textContent="@media print{@page{size:A5 landscape;margin:8mm}#printArea .recHoja{font-size:9.5pt}}";document.head.appendChild(st);
+    const quitar=()=>{st.remove();window.removeEventListener("afterprint",quitar);};window.addEventListener("afterprint",quitar);
+    try{window.print();}catch(e){quitar();}};
   $("#rvPdf").onclick=()=>pdfRecibo(x,tipo,$("#rvMsg"));}
 function abrirNCLista(){panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Notas de crédito</h2><div class="note">Devoluciones, descuentos y ajustes. Bajan el saldo del cliente, pero no cuentan como cobranza ni para comisiones.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
   <div class="card" style="display:grid;gap:8px"><b>Hacer una nota de crédito</b><input id="ncBus" type="search" placeholder="Busca la nota por número o cliente" autocomplete="off"><div id="ncRes"></div></div>
