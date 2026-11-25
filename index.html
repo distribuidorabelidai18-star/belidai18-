@@ -3453,7 +3453,12 @@ function neDescFilas(o){const f=[];const t=totalCot(o),b=brutoCot(o);if(b-t>0.00
   let base=t;for(const d of neDs(o))if(d>0){const m=r2(base*d/100);f.push(["Descuento "+d.toLocaleString("es-VE")+"%",m]);base=r2(base-m);}return f;}
 const neBase=o=>{let base=totalCot(o);for(const d of neDs(o))if(d>0)base=r2(base-r2(base*d/100));return base;},neIva=o=>o.iva?r2(neBase(o)*IVA):0,neTotal=o=>r2(neBase(o)+neIva(o));
 function neMsg(html,cls){const m=$("#neMsg");m.hidden=!html;m.className="status "+(cls||"");m.innerHTML=html||"";}
-function neSugNumero(){let mx=0,len=0;for(const f of [...facturas,...notasEnt]){const t=String(f.numero||"");if(/^\d{5,}$/.test(t)&&+t>mx){mx=+t;len=t.length;}}return mx?String(mx+1).padStart(len,"0"):"";}
+/* Correlativo automático: siguiente al número más alto (incluye la última nota guardada en este equipo,
+   aunque todavía no haya llegado de la base de datos). Si el número fue sugerido (no escrito a mano), se
+   actualiza solo cuando otra persona guarda una nota con ese número. */
+let neUltNum="";
+const neNumUsado=n=>{const id=neIdDe(String(n||"").trim());return !!id&&(notasEnt.some(x=>x.id===id)||facturas.some(f=>f.id==="p"+id));};
+function neSugNumero(){let mx=0,len=0;for(const f of [...facturas,...notasEnt,{numero:neUltNum}]){const t=String(f.numero||"");if(/^\d{5,}$/.test(t)&&+t>mx){mx=+t;len=t.length;}}return mx?String(mx+1).padStart(len,"0"):"";}
 function cliMaestro(nombre,rif){const r=normRif(rif),n=kName(nombre);
   return (r&&clientes.find(c=>normRif(c.rif)===r))||(n&&clientes.find(c=>kName(c.nombre)===n))||null;}
 function venceSegun(c,fecha){const d=new Date((fecha||hoy())+"T00:00:00");if(!/CONT/i.test(c?.tipo||""))d.setDate(d.getDate()+30);return d.toISOString().slice(0,10);}
@@ -3468,9 +3473,10 @@ function neAplicarCli(desde){const c=desde==="rif"?cliMaestro("",$("#neRif").val
   if(!ne.vence||!ne._venceManual){ne.vence=venceSegun(c,ne.fecha);$("#neVence").value=ne.vence;}
   guardarNe();neInfoCli();}
 function cargarCamposNe(){if(!ne.fecha)ne.fecha=hoy();
-  $("#neNum").value=ne.numero||(ne.editando?"":neSugNumero());if(!ne.numero&&$("#neNum").value)ne.numero=$("#neNum").value;
+  $("#neNum").value=ne.numero||(ne.editando?"":neSugNumero());if(!ne.numero&&$("#neNum").value){ne.numero=$("#neNum").value;ne.numAuto=true;}
   $("#neCli").value=ne.cliente;$("#neRif").value=ne.rif?fmtRif(ne.rif):"";$("#neVen").value=ne.vendedor;$("#neFec").value=ne.fecha;$("#neVence").value=ne.vence||"";$("#neNot").value=ne.notas;$("#neIva").checked=!!ne.iva;$("#neD1").value=neDs(ne)[0]||"";$("#neD2").value=neDs(ne)[1]||"";
   $("#neNum").readOnly=!!ne.editando;neInfoCli();}
+$("#neNum").addEventListener("input",()=>{ne.numAuto=false;});
 [["#neNum","numero"],["#neCli","cliente"],["#neRif","rif"],["#neVen","vendedor"],["#neNot","notas"]].forEach(([s_,k])=>$(s_).addEventListener("input",e=>{ne[k]=e.target.value;guardarNe();if(k==="cliente"||k==="rif")neInfoCli();}));
 $("#neCli").addEventListener("change",()=>neAplicarCli("cli"));$("#neRif").addEventListener("change",()=>neAplicarCli("rif"));
 $("#neFec").onchange=e=>{ne.fecha=e.target.value||hoy();if(!ne._venceManual){ne.vence=venceSegun(cliMaestro(ne.cliente,ne.rif),ne.fecha);$("#neVence").value=ne.vence;}guardarNe();};
@@ -3510,7 +3516,7 @@ function renderNe(){if(sec!=="ne")return;
   const dl=$("#dlProd");const k=productos.length+":"+(productos[0]?.id||"");if(dl.dataset.k!==k){dl.dataset.k=k;dl.innerHTML=productos.map(p=>`<option value="${esc(etiqueta(p))}">`).join("");}
   const dc=$("#dlPdCli");const cs=clientesConocidos();if(dc.dataset.k!==String(cs.length)){dc.dataset.k=cs.length;dc.innerHTML=cs.map(c=>`<option value="${esc(c.nombre)}">`).join("");}
   const vs=[...new Set([...facturas.map(f=>f.vendedor),...clientes.map(c=>c.vendedor)].filter(Boolean))].sort();const dv=$("#dlNeVen");if(dv.dataset.k!==String(vs.length)){dv.dataset.k=vs.length;dv.innerHTML=vs.map(v=>`<option value="${esc(v)}">`).join("");}
-  if(!ne.numero&&!ne.editando&&!$("#neNum").matches(":focus")){const sg=neSugNumero();if(sg){ne.numero=sg;$("#neNum").value=sg;}}
+  if(!ne.editando&&!$("#neNum").matches(":focus")&&(!ne.numero||ne.numAuto||neNumUsado(ne.numero))){const sg=neSugNumero();if(sg&&sg!==ne.numero){ne.numero=sg;ne.numAuto=true;$("#neNum").value=sg;guardarNe();}}
   if(neTab==="guardadas")pintarNeLista();else if(!document.activeElement?.closest("#neItems"))pintarNe();}
 function abrirNeTab(t){neTab=t;document.querySelectorAll("#neTabs [data-nt]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.nt===t)));for(const k of ["nueva","guardadas"])$("#nt-"+k).hidden=k!==t;renderNe();}
 document.querySelectorAll("#neTabs [data-nt]").forEach(b=>b.onclick=()=>abrirNeTab(b.dataset.nt));
@@ -3537,7 +3543,7 @@ function neDesde(o,btn){if(ne.items.length&&!btn.dataset.ok){btn.dataset.ok=1;bt
     items:(o.items||[]).map(i=>{const p=productos.find(x=>String(x.codigo)===String(i.codigo));let pr=Number(i.precio);if(!(pr>0)&&p){const s_=precioPara(p,o.cliente);pr=s_?s_.v:0;}
       return {codigo:i.codigo,referencia:i.referencia||"",descripcion:i.descripcion||"",unidad:i.unidad||"PZA",cantidad:Number(i.cantidad)||1,precio:pr||0,...(descDe(i)?{desc:descDe(i)}:{})};})};
   const c=cliMaestro(ne.cliente,"");if(c){ne.rif=c.rif||"";ne.vendedor=c.vendedor||"";ne.vence=venceSegun(c,ne.fecha);}else ne.vence=venceSegun(null,ne.fecha);
-  ne.numero=neSugNumero();cargarCamposNe();guardarNe();cerrar();ir("ne");abrirNeTab("nueva");
+  ne.numero=neSugNumero();ne.numAuto=true;cargarCamposNe();guardarNe();cerrar();ir("ne");abrirNeTab("nueva");
   neMsg(`Nota armada ${o.pedidoId?"con el pedido":"con la cotización"}. Revisa el <b>número de Profit</b>, los precios y toca Guardar nota.`,"ok");}
 /* Hoja y PDF de la nota */
 function neCliDatos(o){const c=cliMaestro(o.cliente,o.rif)||{};return {rif:o.rif||c.rif||"",dir:o.direccion||c.direccionEntrega||c.direccion||"",tel:o.telefono||c.telefonos||""};}
@@ -3611,6 +3617,7 @@ $("#neGuardar").onclick=async()=>{const b=$("#neGuardar");
   if(!id)return neMsg("Escribe el número de la nota (el mismo de Profit).","err"),$("#neNum").focus();
   if(!ne.cliente.trim())return neMsg("Escribe el nombre del cliente.","err"),$("#neCli").focus();
   if(!ne.items.length)return neMsg("Agrega productos a la nota.","err");
+  if(!ne.editando&&ne.numAuto&&neNumUsado(numero)){const sg=neSugNumero();if(sg&&sg!==numero){ne.numero=sg;$("#neNum").value=sg;guardarNe();return neMsg(`El N° ${esc(numero)} ya lo usó otra nota. Te puse el siguiente, <b>N° ${esc(sg)}</b>. Revísalo y toca Guardar otra vez.`,"err");}}
   if(!ne.editando&&(notasEnt.some(n=>n.id===id)||facturas.some(f=>f.id==="p"+id)))return neMsg(`Ya existe la nota <b>N° ${esc(numero)}</b> en cuentas por cobrar. Revisa el número.`,"err"),$("#neNum").focus();
   const sinP=ne.items.filter(i=>!(Number(i.precio)>0));
   if(sinP.length&&!b.dataset.ok){b.dataset.ok=1;b.textContent="Guardar igual";return neMsg(`${sinP.length} producto${sinP.length>1?"s no tienen":" no tiene"} precio. Ponle precio o toca "Guardar igual".`,"err");}
@@ -3623,6 +3630,7 @@ $("#neGuardar").onclick=async()=>{const b=$("#neGuardar");
     await db.doc("notas/"+id).set(doc);
     const fa=facturas.find(f=>f.id==="p"+id)||{};const fd={...fa,cliente:doc.cliente,rif,vendedor:doc.vendedor,numero,fecha:doc.fecha,vencimiento:doc.vence,moneda:"USD",montoOriginal:doc.total,tasa:null,montoUSD:doc.total,origen:fa.origen||"programa",notaId:id,imagen:fa.imagen||"",creado:fa.creado||Date.now()};delete fd.id;
     await db.doc("facturas/p"+id).set(fd);
+    if(!ant&&/^\d+$/.test(numero)&&(!neUltNum||+numero>+neUltNum))neUltNum=numero;
     ne=neVacia();guardarNe();cargarCamposNe();pintarNe();renderNe();
     neMsg(`✓ Nota <b>N° ${esc(numero)}</b> guardada y pasada a cuentas por cobrar. <button class="linkbtn" type="button" id="neAbrir">Descargar su PDF</button>`,"ok");
     $("#neAbrir").onclick=()=>verNeHoja({...doc,id},true);}
