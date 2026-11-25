@@ -1521,7 +1521,9 @@ function renderDetalle(first){
   if(fa){
     fa.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{metodoSel=b.dataset.m;renderDetalle(false);if(metodoSel==="bs")$("#aMonto").value="";});
     const conv=()=>{if(metodoSel!=="bs")return;const m=num($("#aMonto").value),t=num($("#aTasa").value);$("#aConv").hidden=!(m>0&&t>0);if(m>0&&t>0)$("#aConv").textContent=`Equivale a ${fmt(m/t)}`;};
+    const resetRep=()=>{const b=$("#aGuardar");if(b?.dataset.rep){delete b.dataset.rep;b.textContent=esDueno?"Registrar abono":"Enviar para aprobar";$("#aErr").hidden=true;}};
     $("#aMonto").addEventListener("input",conv);$("#aTasa")?.addEventListener("input",conv);conv();
+    for(const id of ["#aMonto","#aTasa"])$(id)?.addEventListener("input",resetRep);
     $("#aTotal").onclick=()=>{if(metodoSel==="bs"){const t=num($("#aTasa").value);if(!(t>0)){$("#aErr").textContent="Escribe primero la tasa del día para pagar el saldo en bolívares.";$("#aErr").hidden=false;$("#aTasa").focus();return;}$("#aMonto").value=String(r2(f.saldo*t)).replace(".",",");}else $("#aMonto").value=String(f.saldo).replace(".",",");conv();guardarAbono(f);};
     fa.onsubmit=e=>{e.preventDefault();guardarAbono(f);};
   }
@@ -1561,32 +1563,54 @@ function renderDetalle(first){
     $("#fSi").onclick=async()=>{$("#fSi").disabled=true;try{for(const a of mis)await db.doc("abonos/"+a.id).delete();await db.doc("facturas/"+f.id).delete();cerrar();}catch(e){$("#confF").innerHTML='<div class="err">No se pudo borrar. Intenta de nuevo.</div>';}};
   });
 }
+/* Un pago mayor que el saldo de la nota se reparte entre las otras notas pendientes del mismo cliente,
+   de la más vieja a la más nueva. Se pide confirmar antes de guardar. */
+const mismoCliPago=(a,b)=>{const ra=normRif(a.rif),rb=normRif(b.rif);return ra&&rb?ra===rb:kName(a.cliente)===kName(b.cliente);};
+function saldoDisp(x){if(esDueno)return r2(x.saldo);const pend=pagosVend.filter(p=>p.estado==="pendiente"&&p.facturaId===x.id).reduce((t,p)=>t+(Number(p.montoUSD)||0),0);return Math.max(0,r2(x.saldo-pend));}
+function repartoPago(f,usd){const partes=[];let resto=r2(usd);
+  const otras=saldos().filter(x=>x.id!==f.id&&x.saldo>0.009&&mismoCliPago(x,f)).sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))||String(a.numero||"").localeCompare(String(b.numero||""),"es",{numeric:true}));
+  for(const x of [f,...otras]){if(resto<=0.009)break;const d=saldoDisp(x);if(d<=0.009)continue;const m=r2(Math.min(d,resto));partes.push({f:x,usd:m});resto=r2(resto-m);}
+  return {partes,sobra:resto>0.009?resto:0};}
 async function guardarAbono(f){
-  const err=$("#aErr");err.hidden=true;const fail=t=>{err.textContent=t;err.hidden=false;};
+  const err=$("#aErr");err.hidden=true;const fail=t=>{err.className="err";err.textContent=t;err.hidden=false;};
   const m=num($("#aMonto").value);const bs=metodoSel==="bs";const t=bs?num($("#aTasa").value):1;
   if(!(m>0))return fail("Escribe el monto del abono.");
   if(bs&&!(t>0))return fail("Escribe la tasa del día para pasar los bolívares a dólares.");
-  const usd=r2(m/t);
-  if(usd>f.saldo+0.01)return fail(`El abono (${fmt(usd)}) es mayor que el saldo de ${fmt(f.saldo)}.`);
-  const btn=$("#aGuardar");btn.disabled=true;btn.textContent="Guardando…";$("#aTotal").disabled=true;
+  const usd=r2(m/t);const btn=$("#aGuardar");const lbl=esDueno?"Registrar abono":"Enviar para aprobar";
+  let partes=[{f,usd:Math.min(usd,f.saldo)}];
+  if(usd>f.saldo+0.01){const r=repartoPago(f,usd);
+    if(r.sobra){delete btn.dataset.rep;btn.textContent=lbl;return fail(`El pago (${fmt(usd)}) es mayor que todo lo que debe ${f.cliente} (${fmt(r2(usd-r.sobra))}). Sobran ${fmt(r.sobra)}: revisa el monto.`);}
+    const firma=usd+"|"+r.partes.map(p=>p.f.id+":"+p.usd).join(",");
+    if(btn.dataset.rep!==firma){btn.dataset.rep=firma;btn.textContent="Confirmar y "+(esDueno?"registrar":"enviar");
+      err.innerHTML=`El pago de <b>${fmt(usd)}</b> es mayor que el saldo de esta nota, así que se reparte entre las notas de ${esc(f.cliente)}:<br>`+
+        r.partes.map(p=>`• Nota <b>${esc(p.f.numero||"—")}</b>${p.f.fecha?" del "+fFecha(p.f.fecha):""}: ${fmt(p.usd)}${p.usd>=saldoDisp(p.f)-0.009?" (la deja pagada)":" (abono)"}`).join("<br>")+
+        `<br>Si está bien, toca <b>Confirmar</b>.`;err.className="status";err.hidden=false;return;}
+    partes=r.partes;}
+  delete btn.dataset.rep;
+  btn.disabled=true;btn.textContent="Guardando…";$("#aTotal").disabled=true;
+  const grupo=partes.length>1?"g"+Date.now().toString(36):null;
+  const comun=i=>({metodo:metodoSel,moneda:bs?"Bs":"USD",tasa:bs?t:null,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now()+i,
+    ...(grupo?{grupo,pagoTotalUSD:usd,parte:(i+1)+" de "+partes.length}:{})});
+  const montoOrig=p=>partes.length>1?r2(p.usd*t):r2(m);
+  const resumen=()=>partes.length>1?` repartido en ${partes.length} notas (${partes.map(p=>(p.f.numero||"—")+": "+fmt(p.usd)).join(" · ")})`:"";
   if(!esDueno){
     try{let foto=null;const file=$("#aFoto")?.files?.[0];if(file){let fo;try{fo=await achicarImg(file,1600,.85);}catch(e){fo=file;}foto=(await assets.upload(fo)).id;}
-      const quien=String(window.PERFIL?.email||"").split("@")[0];
-      const pvDoc={estado:"pendiente",facturaId:f.id,numero:f.numero||"",cliente:f.cliente||"",vendedor:f.vendedor||"",email:window.PERFIL?.email||"",
-        reportadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),metodo:metodoSel,moneda:bs?"Bs":"USD",montoOriginal:r2(m),tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
-        referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),foto,creado:Date.now()};
-      const rpv=await db.collection("pagosVend").add(pvDoc);ultRecibo={t:"pv",id:rpv?.id,doc:{id:rpv?.id,...pvDoc}};
-      msgAbono=`Pago de ${fmt(Math.min(usd,f.saldo))} enviado. Queda por aprobar.`;$("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
-    }catch(e){console.error(e);btn.disabled=false;$("#aTotal").disabled=false;btn.textContent="Enviar para aprobar";fail("No se pudo enviar el pago. "+(/row-level security|policy|permission|42501|403/i.test((e?.message||"")+(e?.code||"")+(e?.statusCode||""))?"Tu usuario no tiene permiso para guardar esto (hay que darle acceso en Supabase).":"Intenta de nuevo.")+" ["+String(e?.message||e?.code||e).slice(0,120)+"]");}
+      const quien=String(window.PERFIL?.email||"").split("@")[0];let i=0;
+      for(const p of partes){const x=p.f;
+        const pvDoc={estado:"pendiente",facturaId:x.id,numero:x.numero||"",cliente:x.cliente||"",vendedor:x.vendedor||"",email:window.PERFIL?.email||"",
+          reportadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),montoOriginal:montoOrig(p),montoUSD:p.usd,foto,...comun(i++)};
+        const rpv=await db.collection("pagosVend").add(pvDoc);if(x.id===f.id)ultRecibo={t:"pv",id:rpv?.id,doc:{id:rpv?.id,...pvDoc}};}
+      msgAbono=`Pago de ${fmt(partes.reduce((a,p)=>a+p.usd,0))} enviado${resumen()}. Queda por aprobar.`;$("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
+    }catch(e){console.error(e);btn.disabled=false;$("#aTotal").disabled=false;btn.textContent=lbl;fail("No se pudo enviar el pago. "+(/row-level security|policy|permission|42501|403/i.test((e?.message||"")+(e?.code||"")+(e?.statusCode||""))?"Tu usuario no tiene permiso para guardar esto (hay que darle acceso en Supabase).":"Intenta de nuevo.")+" ["+String(e?.message||e?.code||e).slice(0,120)+"]");}
     return;}
-  try{
-    const abDoc={facturaId:f.id,cliente:f.cliente,metodo:metodoSel,montoOriginal:r2(m),moneda:bs?"Bs":"USD",tasa:bs?t:null,montoUSD:Math.min(usd,f.saldo),
-      referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now()};
-    const rab=await db.collection("abonos").add(abDoc);ultRecibo={t:"abono",id:rab?.id,doc:{id:rab?.id,...abDoc}};
+  try{let i=0;
+    for(const p of partes){const x=p.f;
+      const abDoc={facturaId:x.id,cliente:x.cliente,montoOriginal:montoOrig(p),montoUSD:p.usd,...comun(i++)};
+      const rab=await db.collection("abonos").add(abDoc);if(x.id===f.id)ultRecibo={t:"abono",id:rab?.id,doc:{id:rab?.id,...abDoc}};}
     const mn=METODOS.find(x=>x.id===metodoSel)?.nombre||metodoSel;
-    msgAbono=`Abono de ${fmt(Math.min(usd,f.saldo))} por ${mn} registrado.`;
+    msgAbono=`Abono de ${fmt(partes.reduce((a,p)=>a+p.usd,0))} por ${mn} registrado${resumen()}.`;
     $("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
-  }catch(e){btn.disabled=false;$("#aTotal").disabled=false;btn.textContent="Registrar abono";fail(e?.code==="invalid_argument"?"No tienes permiso para registrar abonos aquí.":"No se pudo guardar el abono. Intenta de nuevo.");}
+  }catch(e){btn.disabled=false;$("#aTotal").disabled=false;btn.textContent=lbl;fail(e?.code==="invalid_argument"?"No tienes permiso para registrar abonos aquí.":"No se pudo guardar el abono. Intenta de nuevo.");}
 }
 $("#btnNueva").onclick=abrirNueva;$("#btnProfit").onclick=abrirProfit;
 
