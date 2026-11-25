@@ -299,6 +299,7 @@ body:not([data-sec="cxc"]) #cxcActions{display:none!important}
 #ctScan,#neScan{grid-template-columns:6rem minmax(0,1fr) 8rem 6rem auto}
 #neScan label.f{min-width:0}#neScan input{min-width:0;width:100%;box-sizing:border-box}
 @media (max-width:600px){#neScan{grid-template-columns:1fr 1fr 1fr!important}#neScan label:nth-child(2){grid-column:1/-1;grid-row:1}#neScan button{grid-column:1/-1}}
+.ctNeto{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:.9rem;cursor:pointer}.ctNeto input{width:20px;height:20px;flex:none;margin-top:1px}
 .neD{width:8.5rem;font-size:.85rem}.neD input{text-align:center}
 .neIva{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink)}.neIva input{width:20px;height:20px;accent-color:var(--accent)}
 #ctScan label.f{min-width:0}#ctScan input{min-width:0;width:100%;box-sizing:border-box}
@@ -687,7 +688,8 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
         <label class="f">Cliente<input id="ctCli" list="dlPdCli" autocomplete="off" placeholder="Nombre del cliente"></label>
         <label class="f">Válida hasta<input id="ctVal" type="date"></label>
         <label class="f">Condiciones / notas<input id="ctNot" autocomplete="off" placeholder="Ej: precios en $, pago de contado"></label>
-      </div></div>
+      </div>
+      <label class="ctNeto"><input type="checkbox" id="ctNeto"> <span><b>Precio directo:</b> en la cotización sale el precio ya con el descuento, sin mostrar el %</span></label></div>
       <button type="button" class="ctLista" id="ctAbrirLista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg><span><b>Ver lista de productos</b><small>Marca los que quieras o agrégalos todos de una vez</small></span></button>
       <form class="scan" id="ctScan" novalidate>
         <label class="f">Piezas<input id="ctQty" type="number" min="1" value="1" inputmode="numeric"></label>
@@ -3019,7 +3021,13 @@ function renderCot(){
 function abrirCotTab(t){cotTab=t;document.querySelectorAll("#ctTabs [data-ct]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.ct===t)));
   for(const k of ["nueva","guardadas"])$("#ct-"+k).hidden=k!==t;renderCot();}
 document.querySelectorAll("#ctTabs [data-ct]").forEach(b=>b.onclick=()=>abrirCotTab(b.dataset.ct));
-function cargarCamposCot(){if(!cot.validez)cot.validez=sumarDias(7);$("#ctCli").value=cot.cliente;$("#ctVal").value=cot.validez;$("#ctNot").value=cot.notas;}
+function cargarCamposCot(){if(!cot.validez)cot.validez=sumarDias(7);$("#ctCli").value=cot.cliente;$("#ctVal").value=cot.validez;$("#ctNot").value=cot.notas;$("#ctNeto").checked=!!cot.precioNeto;}
+$("#ctNeto").onchange=e=>{cot.precioNeto=e.target.checked;guardarCot();};
+/* Cotización con "precio directo": cada precio sale ya rebajado y sin la columna de descuento.
+   El total puede variar algún céntimo por redondeo del precio unitario. */
+function vistaCot(o){if(!o?.precioNeto)return o;
+  return {...o,items:(o.items||[]).map(i=>{const d=descDe(i);if(!d)return i;const c=Number(i.cantidad)||0;
+    return {...i,precio:r2((Number(i.precio)||0)*(1-d/100)),desc:0};})};}
 cargarCamposCot();
 [["#ctCli","cliente"],["#ctVal","validez"],["#ctNot","notas"]].forEach(([s,k])=>$(s).oninput=e=>{cot[k]=e.target.value;guardarCot();});
 function sugerirEnForm(){const p=buscarProducto($("#ctCode").value);const ip=$("#ctPre");if(!p){ip.placeholder="0,00";return;}
@@ -3040,7 +3048,7 @@ $("#ctVaciar").onclick=()=>{const b=$("#ctVaciar");if(b.dataset.ok){cot=cotVacia
   else{b.dataset.ok=1;b.textContent="¿Vaciar todo?";setTimeout(()=>{b.textContent="Vaciar";delete b.dataset.ok;},3000);}};
 
 /* Hoja de la cotización */
-function cotHTML(o){const conD=o.items.some(i=>descDe(i)>0);const logo=$(".logo")?.src||"";const u=o.items.reduce((s,i)=>s+(Number(i.cantidad)||0),0);const conF=o.items.some(i=>fotoDe(i));
+function cotHTML(o){o=vistaCot(o);const conD=o.items.some(i=>descDe(i)>0);const logo=$(".logo")?.src||"";const u=o.items.reduce((s,i)=>s+(Number(i.cantidad)||0),0);const conF=o.items.some(i=>fotoDe(i));
   return `<div class="hojaDoc"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:15px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
     <div style="text-align:right"><div style="font-size:13px;font-weight:700">COTIZACIÓN</div><div class="mono" style="font-size:14px;font-weight:700">N° ${esc(o.numero)}</div><div>Fecha: ${fFecha(o.fecha||hoy())}</div>${o.validez?`<div>Válida hasta: ${fFecha(o.validez)}</div>`:""}</div></div>
     <div class="meta"><div><b>Cliente:</b> ${esc(o.cliente||"—")}</div>${o.notas?`<div><b>Condiciones:</b> ${esc(o.notas)}</div>`:""}</div>
@@ -3049,7 +3057,7 @@ function cotHTML(o){const conD=o.items.some(i=>descDe(i)>0);const logo=$(".logo"
     ${conD?`<tr><td colspan="${(conF?4:3)+3}" style="text-align:right">Subtotal sin descuento</td><td class="r">${fmt(brutoCot(o))}</td></tr><tr><td colspan="${(conF?4:3)+3}" style="text-align:right">Descuento</td><td class="r">− ${fmt(r2(brutoCot(o)-totalCot(o)))}</td></tr>`:""}
     <tr class="tot"><td colspan="${conF?4:3}" style="text-align:right">TOTAL</td><td class="c">${u}</td><td></td>${conD?"<td></td>":""}<td class="r">${fmt(totalCot(o))}</td></tr></tbody></table>
     <p style="margin-top:14px;font-size:11px;color:#444">Precios en dólares (USD). Sujeto a disponibilidad de inventario al momento de confirmar el pedido.</p></div>`;}
-function cotPDF(J,o,fotos){fotos=fotos||{};const conD=o.items.some(i=>descDe(i)>0);const conF=o.items.some(i=>fotos[fotoDe(i)]);
+function cotPDF(J,o,fotos){o=vistaCot(o);fotos=fotos||{};const conD=o.items.some(i=>descDe(i)>0);const conF=o.items.some(i=>fotos[fotoDe(i)]);
   const d=new J({unit:"mm",format:"a4"}),W=210,H=297,M=14,X1=W-M;let y=M;const logo=$(".logo")?.src||"";
   if(logo){try{d.addImage(logo,"PNG",M,y,30,16);}catch(e){}}
   const tx=logo?M+34:M;
@@ -3109,14 +3117,18 @@ function verCotHoja(o,guardada){
   panel(`<div class="ph"><div><div class="eyebrow">${guardada?"Cotización · "+fFecha(o.fecha):"Vista previa"}</div><h2>${esc(o.numero)}</h2><div class="note">${esc(o.cliente||"Sin cliente")} · ${fmt(totalCot(o))}</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
   <div class="toolbar"><button class="primary" type="button" id="cvPdf">Descargar PDF</button><button type="button" id="cvPrint">Imprimir</button>
     ${guardada?`<button type="button" id="cvEdit">Abrir para cambiar</button><button type="button" id="cvPed">Pasar a pedido</button><button type="button" id="cvNe">Pasar a nota de entrega</button>`:""}</div>
+  <label class="ctNeto" style="margin:0"><input type="checkbox" id="cvNeto" ${o.precioNeto?"checked":""}> <span><b>Precio directo</b> (sin mostrar el % de descuento)</span></label>
   <div id="cvMsg" class="status" hidden></div>
-  <div class="hojaWrap">${cotHTML(o)}</div>
+  <div class="hojaWrap" id="cvHoja">${cotHTML(o)}</div>
   ${guardada?`<div><button class="danger" type="button" id="cvDel">Borrar esta cotización</button></div>`:`<p class="note" style="margin:0">Si "Imprimir" no abre nada en tu teléfono, usa "Descargar PDF" y lo compartes por WhatsApp o correo desde ahí.</p>`}`);
   $(".panel").style.width="min(860px,100%)";
+  $("#cvNeto").onchange=async e=>{o={...o,precioNeto:e.target.checked};$("#cvHoja").innerHTML=cotHTML(o);
+    if(!guardada){cot.precioNeto=o.precioNeto;guardarCot();$("#ctNeto").checked=o.precioNeto;}
+    else if(o.id&&db){try{await db.doc("cotizaciones/"+o.id).update({precioNeto:o.precioNeto});}catch(_){}}};
   $("#cvPdf").onclick=()=>descargarCot(o,$("#cvMsg"));
   $("#cvPrint").onclick=()=>{$("#printArea").innerHTML=cotHTML(o);try{window.print();}catch(e){}};
   if(!guardada)return;
-  $("#cvEdit").onclick=()=>{cot={cliente:o.cliente||"",validez:o.validez||"",notas:o.notas||"",items:(o.items||[]).map(i=>({...i})),numero:o.numero};cargarCamposCot();guardarCot();cerrar();abrirCotTab("nueva");
+  $("#cvEdit").onclick=()=>{cot={cliente:o.cliente||"",validez:o.validez||"",notas:o.notas||"",precioNeto:!!o.precioNeto,items:(o.items||[]).map(i=>({...i})),numero:o.numero};cargarCamposCot();guardarCot();cerrar();abrirCotTab("nueva");
     ctMsg(`Estás cambiando la cotización <b>${esc(o.numero)}</b>. Al guardar se actualiza.`,"");};
   $("#cvPed").onclick=()=>{const b=$("#cvPed");
     if(ped.items.length&&!b.dataset.ok){b.dataset.ok=1;b.textContent="Ya tienes un pedido a medio armar. Toca otra vez para reemplazarlo";return;}
@@ -3138,7 +3150,7 @@ $("#ctGuardar").onclick=async()=>{
   try{
     if(!cot.numero){let t=0;while(t<20&&(await db.doc("cotizaciones/"+numero).get()).exists){const m=numero.match(/^(.*-)(\d+)$/);numero=m[1]+String(+m[2]+1).padStart(2,"0");t++;}}
     const ant=cotizaciones.find(x=>x.numero===numero);
-    const doc={numero,cliente:cot.cliente.trim(),validez:cot.validez||"",notas:cot.notas.trim(),items:cot.items.map(i=>{const f=fotoDe(i);return {...i,cantidad:Number(i.cantidad)||1,precio:r2(i.precio),...(f?{foto:f}:{})};}),total:totalCot(cot),fecha:ant?.fecha||hoy(),creado:ant?.creado||Date.now(),editado:ant?Date.now():null};
+    const doc={numero,cliente:cot.cliente.trim(),validez:cot.validez||"",notas:cot.notas.trim(),...(cot.precioNeto?{precioNeto:true}:{}),items:cot.items.map(i=>{const f=fotoDe(i);return {...i,cantidad:Number(i.cantidad)||1,precio:r2(i.precio),...(f?{foto:f}:{})};}),total:totalCot(cot),fecha:ant?.fecha||hoy(),creado:ant?.creado||Date.now(),editado:ant?Date.now():null};
     await db.doc("cotizaciones/"+numero).set(doc);
     cot=cotVacia();cargarCamposCot();guardarCot();pintarCot();renderCot();
     ctMsg(`✓ Cotización <b>${esc(numero)}</b> guardada. <button class="linkbtn" type="button" id="ctAbrir">Descargar su PDF</button>`,"ok");
