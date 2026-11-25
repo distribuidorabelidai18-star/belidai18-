@@ -1558,7 +1558,8 @@ function renderDetalle(first){
         msgAbono=`Número cambiado: ${f.numero||"—"} → ${nuevo}.`;detId=nid;setTimeout(()=>{if(facturas.some(x=>x.id===nid))abrirDetalleMsg(nid);},300);}
       catch(x){console.error(x);bt.disabled=false;bt.textContent="Cambiar";fail("No se pudo cambiar. Revisa tu conexión e intenta de nuevo.");}};});
   $("#delF")&&($("#delF").onclick=()=>{
-    $("#confF").innerHTML=`<div class="confirm">Se borrará la nota de ${esc(f.cliente)} y sus ${mis.length} abono${mis.length===1?"":"s"}. No se puede deshacer.<span class="spacer"></span><button type="button" id="fNo">Cancelar</button><button class="primary" type="button" id="fSi" style="background:var(--bad);border-color:var(--bad)">Borrar nota</button></div>`;
+    const pvP=pagosVend.filter(p=>p.estado==="pendiente"&&p.facturaId===f.id).length;
+    $("#confF").innerHTML=`<div class="confirm">Se borrará la nota de ${esc(f.cliente)} y sus ${mis.length} abono${mis.length===1?"":"s"}.${pvP?` <b>Ojo: tiene ${pvP} pago${pvP>1?"s":""} por aprobar.</b>`:""} No se puede deshacer.<span class="spacer"></span><button type="button" id="fNo">Cancelar</button><button class="primary" type="button" id="fSi" style="background:var(--bad);border-color:var(--bad)">Borrar nota</button></div>`;
     $("#fNo").onclick=()=>$("#confF").innerHTML="";
     $("#fSi").onclick=async()=>{$("#fSi").disabled=true;try{for(const a of mis)await db.doc("abonos/"+a.id).delete();await db.doc("facturas/"+f.id).delete();cerrar();}catch(e){$("#confF").innerHTML='<div class="err">No se pudo borrar. Intenta de nuevo.</div>';}};
   });
@@ -2130,14 +2131,23 @@ function renderPorAprobar(){
 function abrirPorAprobar(){
   panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Pagos por aprobar</h2><div class="note">Pagos que reportaron los vendedores. Revisa la foto, corrige el monto o la tasa si hace falta, y apruébalo: queda registrado como abono.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div><div id="paLista"></div>`);
   $(".panel").style.width="min(760px,100%)";pintarPorAprobar();}
+/* Nota de un pago reportado. Si la nota original se borró y se volvió a cargar (por ejemplo desde Profit
+   o como nota de entrega), se busca la del mismo número y cliente para aplicarle el pago. */
+function notaDePago(x,lista){lista=lista||saldos();const f=lista.find(z=>z.id===x.facturaId);if(f)return {f,cambio:false};
+  const n=String(x.numero||"").trim();if(!n)return {f:null};
+  const g=lista.find(z=>String(z.numero||"").trim()===n&&mismoCliPago(z,x))||lista.find(z=>String(z.numero||"").trim()===n);
+  return g?{f:g,cambio:true}:{f:null};}
+const pvClave=x=>[kName(x.cliente),x.numero,x.metodo,r2(x.montoUSD),x.fecha,String(x.referencia||"").trim()].join("|");
 function pintarPorAprobar(){
   const el=$("#paLista");if(!el||el.contains(document.activeElement)&&document.activeElement.tagName==="INPUT")return;
   const sal={};for(const f of saldos())sal[f.id]=f;
   const pend=pagosVend.filter(x=>x.estado==="pendiente").sort((a,b)=>(a.creado||0)-(b.creado||0));
   const hechos=pagosVend.filter(x=>x.estado!=="pendiente").sort((a,b)=>(b.revisado||0)-(a.revisado||0)).slice(0,10);
-  el.innerHTML=(pend.length?pend.map(x=>{const f=sal[x.facturaId];const bs=x.moneda==="Bs";return `<div class="pvCard" data-pv="${esc(x.id)}">${pvFoto(x)}<div style="display:grid;gap:8px;min-width:0">
+  const lst=Object.values(sal),cuenta={};for(const x of pend)cuenta[pvClave(x)]=(cuenta[pvClave(x)]||0)+1;
+  el.innerHTML=(pend.length?pend.map(x=>{const nd=notaDePago(x,lst),f=nd.f;const bs=x.moneda==="Bs";const dup=cuenta[pvClave(x)]>1;return `<div class="pvCard" data-pv="${esc(x.id)}">${pvFoto(x)}<div style="display:grid;gap:8px;min-width:0">
       <div><div class="cl" style="white-space:normal">${esc(x.cliente)} · Nota ${esc(x.numero||"—")}</div><div class="sub" style="white-space:normal">Reportado por <b>${esc(x.reportadoPor||x.vendedor)}</b> · ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?` · Ref. ${esc(x.referencia)}`:""}</div>
-      <div class="sub">${f?`Saldo actual de la nota: <b>${fmt(f.saldo)}</b>`:`<b style="color:var(--bad)">La nota ya no existe</b>`}</div></div>
+      <div class="sub">${f?`Saldo actual de la nota: <b>${fmt(f.saldo)}</b>${nd.cambio?` <span style="color:#92400e">· la nota se volvió a cargar; el pago se aplicará a la actual</span>`:""}`:`<b style="color:var(--bad)">La nota ${esc(x.numero||"")} fue borrada de cuentas por cobrar</b>: si ya no se debe, recházalo; si se volvió a cargar con otro número, rechaza este y que lo carguen en la nota nueva.`}</div>
+      ${dup?`<div class="sub"><b style="color:var(--bad)">⚠ Posible pago repetido:</b> hay otro igual (mismo cliente, nota, monto, fecha y forma de pago). Aprueba solo uno y rechaza el otro.</div>`:""}</div>
       <div class="grid2"><label class="f">${bs?"Monto en Bs":"Monto en $"}<input data-k="m" inputmode="decimal" value="${String(x.montoOriginal).replace(".",",")}"></label>${bs?`<label class="f">Tasa<input data-k="t" inputmode="decimal" value="${String(x.tasa).replace(".",",")}"></label>`:"<span></span>"}</div>
       <div class="note" data-k="u">= <b>${fmt(x.montoUSD)}</b></div>
       <div class="toolbar"><input data-k="mot" placeholder="Motivo si lo rechazas" style="flex:1;min-width:140px"><button type="button" data-a="no">Rechazar</button><button type="button" class="primary" data-a="si">✓ Aprobar</button></div>
@@ -2150,7 +2160,7 @@ function pintarPorAprobar(){
     card.querySelector('[data-a="no"]').onclick=async e=>{const b=e.target;b.disabled=true;
       try{await db.doc("pagosVend/"+x.id).update({estado:"rechazado",motivo:q("mot").value.trim(),revisado:Date.now()});}catch(er){b.disabled=false;fail("No se pudo guardar. Intenta de nuevo.");}};
     card.querySelector('[data-a="si"]').onclick=async e=>{const b=e.target;q("err").hidden=true;
-      const f=saldos().find(z=>z.id===x.facturaId);if(!f)return fail("La nota ya no existe.");
+      const f=notaDePago(x).f;if(!f)return fail("La nota fue borrada de cuentas por cobrar. Rechaza este pago.");
       const m=num(q("m").value),t=x.moneda==="Bs"?num(q("t").value):1,u=usd();
       if(!(u>0))return fail("Revisa el monto y la tasa.");
       if(f.saldo<=0)return fail("Esta nota ya está pagada.");
@@ -2158,7 +2168,7 @@ function pintarPorAprobar(){
       b.disabled=true;b.textContent="Aprobando…";
       try{const ab=await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:x.metodo,montoOriginal:r2(m),moneda:x.moneda,tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),
           referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now(),comprobante:x.foto||null,reportadoPor:x.reportadoPor||x.vendedor||"",pagoVendId:x.id});
-        await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
+        await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,facturaId:f.id,numero:f.numero||x.numero||"",montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
       }catch(er){console.error(er);b.disabled=false;b.textContent="✓ Aprobar";fail("No se pudo aprobar. Intenta de nuevo.");}};});}
 $("#btnPorAprobar").onclick=abrirPorAprobar;
 
