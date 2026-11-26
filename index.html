@@ -299,6 +299,10 @@ body:not([data-sec="cxc"]) #cxcActions{display:none!important}
 #ctScan,#neScan{grid-template-columns:6rem minmax(0,1fr) 8rem 6rem auto}
 #neScan label.f{min-width:0}#neScan input{min-width:0;width:100%;box-sizing:border-box}
 @media (max-width:600px){#neScan{grid-template-columns:1fr 1fr 1fr!important}#neScan label:nth-child(2){grid-column:1/-1;grid-row:1}#neScan button{grid-column:1/-1}}
+.sugBox{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:60;background:#fff;color:#1c1b19;border:1px solid var(--line,#ddd);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:340px;overflow:auto;text-align:left}
+.sugBox button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eee;background:none;padding:9px 12px;font:inherit;font-size:.9rem;color:inherit;cursor:pointer;border-radius:0}
+.sugBox button:last-child{border-bottom:0}.sugBox button.on,.sugBox button:hover{background:#eef3fb}
+.sugBox b{font-family:var(--f-mono,monospace)}.sugBox small{display:block;color:#666;font-size:.78rem}
 .ctNeto{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:.9rem;cursor:pointer}.ctNeto input{width:20px;height:20px;flex:none;margin-top:1px}
 .neD{width:8.5rem;font-size:.85rem}.neD input{text-align:center}
 .neIva{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink)}.neIva input{width:20px;height:20px;accent-color:var(--accent)}
@@ -637,7 +641,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
         <label class="f">Nota<input id="enNota" autocomplete="off" placeholder="Ej: factura A-889, contenedor"></label></div></div>
       <form class="scan" id="enScan" novalidate>
         <label class="f">Cantidad<input id="enQty" type="number" min="1" value="1" inputmode="numeric"></label>
-        <label class="f">Código de barras, referencia o nombre<input id="enCode" list="dlProd" autocomplete="off" placeholder="Escanea o escribe…" enterkeyhint="done"></label>
+        <label class="f">Código de barras, referencia o nombre<input id="enCode" data-sug="prod" autocomplete="off" placeholder="Escanea o escribe…" enterkeyhint="done"></label>
         <button type="submit">Agregar</button></form>
       <div id="enMsg" class="status" hidden></div>
       <div class="list" id="enItems"></div>
@@ -693,7 +697,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <button type="button" class="ctLista" id="ctAbrirLista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg><span><b>Ver lista de productos</b><small>Marca los que quieras o agrégalos todos de una vez</small></span></button>
       <form class="scan" id="ctScan" novalidate>
         <label class="f">Piezas<input id="ctQty" type="number" min="1" value="1" inputmode="numeric"></label>
-        <label class="f">Producto (código, referencia o nombre)<input id="ctCode" list="dlProd" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
+        <label class="f">Producto (código, referencia o nombre)<input id="ctCode" data-sug="prod" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
         <label class="f">Precio $ c/u<input id="ctPre" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label>
         <label class="f">Desc. %<input id="ctDesc" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="0"></label>
         <button type="submit">Agregar</button>
@@ -749,7 +753,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <div class="toolbar" style="margin-top:10px"><label class="neIva"><input type="checkbox" id="neIva"> Agregar IVA (16%)</label><label class="f neD">Descuento 1 %<input id="neD1" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></label><label class="f neD">Descuento 2 %<input id="neD2" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></label><span class="spacer"></span><span class="note" id="neCliInfo"></span></div></div>
       <form class="scan" id="neScan" novalidate>
         <label class="f">Piezas<input id="neQty" type="number" min="1" value="1" inputmode="numeric"></label>
-        <label class="f">Producto (código, referencia o nombre)<input id="neCode" list="dlProd" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
+        <label class="f">Producto (código, referencia o nombre)<input id="neCode" data-sug="prod" autocomplete="off" placeholder="Busca el producto…" enterkeyhint="next"></label>
         <label class="f">Precio $ c/u<input id="nePre" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></label>
         <label class="f">Desc. %<input id="neDesc" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="0"></label>
         <button type="submit">Agregar</button>
@@ -809,7 +813,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       </div></div>
       <form class="scan" id="pdScan" novalidate>
         <label class="f">Cantidad<input id="pdQty" type="number" min="1" value="1" inputmode="numeric"></label>
-        <label class="f">Código de barras, referencia o nombre<input id="pdCode" list="dlProd" autocomplete="off" placeholder="Escanea o escribe…" enterkeyhint="done"></label>
+        <label class="f">Código de barras, referencia o nombre<input id="pdCode" data-sug="prod" autocomplete="off" placeholder="Escanea o escribe…" enterkeyhint="done"></label>
         <button type="submit">Agregar</button>
       </form>
       <div id="pdMsg" hidden></div>
@@ -2738,6 +2742,30 @@ function pdMsg(html,cls){const m=$("#pdMsg");m.hidden=!html;m.className="status 
 function buscarProducto(t){t=String(t||"").trim();if(!t)return null;const tl=t.toLowerCase();
   return productos.find(p=>String(p.codigo)===t)||productos.find(p=>(p.referencia||"").toLowerCase()===tl)||productos.find(p=>etiqueta(p).toLowerCase()===tl)
     ||(()=>{const c=productos.filter(p=>(p.descripcion||"").toLowerCase().includes(tl));return c.length===1?c[0]:null;})();}
+/* Sugerencias de productos al escribir (código, referencia o cualquier parte del nombre). Reemplaza la lista del navegador,
+   que en algunos equipos dejaba de mostrar opciones hasta escribir el código completo. */
+function buscarSug(q,max){q=String(q||"").trim().toLowerCase();if(!q)return [];const tk=q.split(/\s+/).filter(Boolean);const out=[];
+  for(const p of productos){const ref=String(p.referencia||"").toLowerCase(),cod=String(p.codigo||"").toLowerCase();
+    const h=(ref+" "+cod+" "+String(p.descripcion||"")+" "+String(p.marca||"")+" "+String(p.barras||"")).toLowerCase();
+    if(!tk.every(t=>h.includes(t)))continue;
+    const r=ref===q||cod===q?0:ref.startsWith(q)||cod.startsWith(q)?1:ref.includes(q)||cod.includes(q)?2:3;out.push([r,p]);}
+  out.sort((a,b)=>a[0]-b[0]||String(a[1].referencia||"").localeCompare(String(b[1].referencia||""),"es"));return out.slice(0,max||12).map(x=>x[1]);}
+function activarSug(inp){if(!inp||inp.dataset.sugOk)return;inp.dataset.sugOk=1;const wrap=inp.parentElement;if(getComputedStyle(wrap).position==="static")wrap.style.position="relative";
+  const box=document.createElement("div");box.className="sugBox";box.hidden=true;box.setAttribute("role","listbox");wrap.appendChild(box);
+  let lista=[],act=-1;
+  const cerrarS=()=>{box.hidden=true;act=-1;};
+  const elegir=p=>{inp.value=etiqueta(p);cerrarS();inp.dispatchEvent(new Event("input",{bubbles:true}));inp.dispatchEvent(new Event("change",{bubbles:true}));};
+  const pintar=()=>{lista=buscarSug(inp.value,12);if(!lista.length||document.activeElement!==inp){cerrarS();return;}
+    box.innerHTML=lista.map((p,i)=>`<button type="button" role="option" data-i="${i}" class="${i===act?"on":""}"><b>${esc(p.referencia||p.codigo)}</b> — ${esc(p.descripcion||"")}<small>${esc(marcaDe(p))}${Number(p.precio)>0?" · "+fmt(p.precio):""} · hay ${existencia(p.codigo)}</small></button>`).join("");
+    box.hidden=false;box.querySelectorAll("button").forEach(b=>b.onmousedown=e=>{e.preventDefault();elegir(lista[+b.dataset.i]);});};
+  inp.addEventListener("input",e=>{if(e.isTrusted){act=-1;pintar();}});
+  inp.addEventListener("focus",()=>{if(inp.value.trim()&&!buscarProducto(inp.value))pintar();});
+  inp.addEventListener("blur",()=>setTimeout(cerrarS,150));
+  inp.addEventListener("keydown",e=>{if(box.hidden)return;
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();act=(act+(e.key==="ArrowDown"?1:-1)+lista.length)%lista.length;pintar();box.querySelector("button.on")?.scrollIntoView({block:"nearest"});}
+    else if(e.key==="Enter"&&act>=0){e.preventDefault();e.stopPropagation();elegir(lista[act]);}
+    else if(e.key==="Escape")cerrarS();});}
+document.querySelectorAll('input[data-sug="prod"]').forEach(activarSug);
 function agregarItem(p,q){const i=ped.items.findIndex(x=>x.codigo===p.codigo);
   if(i>=0)ped.items[i].cantidad=(Number(ped.items[i].cantidad)||0)+q;else ped.items.push({codigo:p.codigo,referencia:p.referencia||"",descripcion:p.descripcion||"",unidad:p.unidad||"PZA",cantidad:q});
   guardarBorrador();pintarItems(p.codigo);}
