@@ -831,6 +831,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
 
     <div class="sec" id="pt-web" hidden>
       <p class="note" style="margin:0">Pedidos que mandaron los vendedores y clientes desde la página de pedidos. Mientras están aquí, esas piezas quedan <b>apartadas</b>: la página ya no se las ofrece a otro. Pásalos a pedido o a nota de entrega; si no se van a despachar, cancélalos para liberar la mercancía.</p>
+      <div class="toolbar"><span class="spacer"></span><button type="button" id="pwPegar">📋 Pegar pedidos de WhatsApp</button></div>
       <div id="pwMsg" class="status" hidden></div>
       <div id="pwLista"></div>
     </div>
@@ -2775,6 +2776,44 @@ function pwBadge(){const b=$("#pwTab");if(b)b.innerHTML=`Pedidos web${pedWeb.len
 async function marcarPedWeb(id,estado,destino){const sb=window.SB;if(!sb||!id)return;
   const {error}=await sb.from("pedidos_web").update({estado,destino:destino||null,revisado:new Date().toISOString(),revisado_por:window.PERFIL?.email||""}).eq("id",id);
   if(error)throw error;pedWeb=pedWeb.filter(x=>x.id!==id);pwBadge();cargarPedWeb();}
+/* Pedidos viejos que llegaron por WhatsApp (mensajes "*PEDIDO DB18*"): se pegan aquí y quedan como pedidos web pendientes */
+const numVE=t=>{t=String(t||"").replace(/[^\d.,]/g,"");if(t.includes(","))t=t.replace(/\./g,"").replace(",",".");return Number(t)||0;};
+function leerPedidosWA(txt){const out=[];
+  const bloques=String(txt||"").replace(/\r/g,"").split(/\*?PEDIDO DB18\b/i).slice(1);
+  for(const b of bloques){const L=b.split("\n").map(x=>x.replace(/^\[[^\]]*\]\s*[^:]{0,40}:\s*/,"").trimEnd());
+    const o={origen:/^\s*\(cliente\)/i.test(L[0]||"")?"cliente":"vendedor",vendedor:"",cliente:"",nota:"",fecha:"",items:[],faltan:[]};
+    for(let i=0;i<L.length;i++){const l=L[i].trim();let m;
+      if(m=l.match(/^Vendedor:\s*(.+)$/i))o.vendedor=m[1].trim();
+      else if(m=l.match(/^Cliente:\s*(.+)$/i))o.cliente=m[1].trim();
+      else if(m=l.match(/^Fecha:\s*(.+)$/i))o.fecha=m[1].trim();
+      else if(m=l.match(/^Nota:\s*(.+)$/i))o.nota=m[1].trim();
+      else if(m=l.match(/^\d+\.\s*\*?([^*·]+?)\*?\s*·/)){const ref=m[1].trim();const q=(L[i+1]||"").trim().match(/^([\d.]+)\s+\S*\s*[×x]\s*\$?\s*([\d.,]+)/i);if(!q)continue;i++;
+        const p=productos.find(x=>String(x.referencia||"").trim().toLowerCase()===ref.toLowerCase())||productos.find(x=>String(x.codigo||"").trim().toLowerCase()===ref.toLowerCase());
+        if(!p){o.faltan.push(ref);continue;}
+        o.items.push({c:String(p.codigo),r:p.referencia||ref,d:p.descripcion||"",u:p.unidad||"PZA",n:Number(q[1].replace(/\./g,""))||1,p:numVE(q[2])});}}
+    if(o.items.length||o.faltan.length)out.push(o);}
+  return out;}
+function abrirPegarWA(){
+  panel(`<div class="ph"><div><div class="eyebrow">Pedidos web</div><h2>Pegar pedidos de WhatsApp</h2><div class="note">Copia en WhatsApp los mensajes de pedidos (los que empiezan con <b>*PEDIDO DB18*</b>) y pégalos aquí. Puedes pegar varios de una vez. Quedan en Pedidos web y apartan la mercancía.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+    <textarea id="waTxt" rows="9" placeholder="Pega aquí uno o varios pedidos…" style="width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px"></textarea>
+    <div class="toolbar"><span class="note" id="waRes"></span><span class="spacer"></span><button type="button" class="primary" id="waOk" disabled>Guardar pedidos</button></div>
+    <div id="waMsg" class="status" hidden></div><div id="waPrev"></div>`);
+  let lista=[];
+  const prev=()=>{lista=leerPedidosWA($("#waTxt").value);const ok=lista.filter(o=>o.items.length&&o.cliente);
+    $("#waRes").textContent=lista.length?`${lista.length} pedido${lista.length>1?"s":""} encontrado${lista.length>1?"s":""}`:"";
+    $("#waOk").disabled=!ok.length;$("#waOk").textContent=ok.length?`Guardar ${ok.length} pedido${ok.length>1?"s":""}`:"Guardar pedidos";
+    $("#waPrev").innerHTML=lista.length?`<div class="list">${lista.map(o=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><span style="min-width:0"><div class="cl" style="white-space:normal"><b>${esc(o.cliente||"(sin cliente)")}</b>${o.vendedor?" · "+esc(o.vendedor):""}${o.fecha?" · "+esc(o.fecha):""}</div>
+      <div class="sub" style="white-space:normal">${o.items.length} producto${o.items.length===1?"":"s"} · ${o.items.reduce((t,i)=>t+i.n,0)} pzas${o.faltan.length?` · <b style="color:var(--bad)">no encontré: ${esc(o.faltan.join(", "))}</b>`:""}${!o.cliente?' · <b style="color:var(--bad)">sin cliente, no se guarda</b>':""}</div></span>
+      <b class="num">${fmt(r2(o.items.reduce((t,i)=>t+i.n*i.p,0)))}</b></div>`).join("")}</div>`:"";};
+  $("#waTxt").oninput=prev;
+  $("#waOk").onclick=async()=>{const b=$("#waOk"),m=$("#waMsg");const ok=lista.filter(o=>o.items.length&&o.cliente);b.disabled=true;b.textContent="Guardando…";
+    try{const filas=ok.map(o=>({origen:o.origen,vendedor:o.vendedor.slice(0,200),cliente:o.cliente.slice(0,200),nota:[o.fecha?"Pedido del "+o.fecha+" (WhatsApp)":"Pedido de WhatsApp",o.nota].filter(Boolean).join(". ").slice(0,1000),
+        items:o.items,total:r2(o.items.reduce((t,i)=>t+i.n*i.p,0))}));
+      const {error}=await window.SB.from("pedidos_web").insert(filas);if(error)throw error;
+      cerrar();await cargarPedWeb();pdMsgWeb(`✓ ${filas.length} pedido${filas.length>1?"s":""} guardado${filas.length>1?"s":""} en Pedidos web. Esa mercancía ya quedó apartada.`);}
+    catch(e){console.error(e);m.className="status err";m.textContent="No se pudieron guardar. "+(e?.message||"");m.hidden=false;b.disabled=false;b.textContent="Guardar pedidos";}};}
+function pdMsgWeb(t){const m=$("#pwMsg");if(!m)return;m.className="status ok";m.innerHTML=t;m.hidden=false;}
+$("#pwPegar").onclick=abrirPegarWA;
 function pwItems(o){return (o.items||[]).map(i=>({codigo:String(i.c||""),referencia:i.r||"",descripcion:i.d||"",unidad:i.u||"PZA",cantidad:Number(i.n)||1,precio:Number(i.p)||0}));}
 function pintarPedWeb(){const el=$("#pwLista");if(!el)return;
   if(pwErr==="falta"){el.innerHTML=`<div class="list"><div class="empty"><strong>Falta activar los pedidos web</strong><span>Hay que pegar el archivo pedidos-web.sql en Supabase (SQL Editor → Run).</span></div></div>`;return;}
