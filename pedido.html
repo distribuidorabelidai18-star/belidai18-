@@ -117,6 +117,14 @@ button:disabled{opacity:.5;cursor:default}
 const SUPABASE_URL="https://iwuhgtshyospffaulenb.supabase.co";
 const BASE=SUPABASE_URL+"/storage/v1/object/public/fotos/";
 const WA="584126390349";
+const SB_KEY="sb_publishable_xWSOGxq5IIOXtCXe_b40dQ_8taATX_X";
+// Piezas apartadas por pedidos que ya mandaron y todavía no se despachan
+let apartado={};
+async function cargarApartado(){try{const r=await fetch(SUPABASE_URL+"/rest/v1/rpc/apartado_web",{method:"POST",headers:{apikey:SB_KEY,"Content-Type":"application/json"},body:"{}",cache:"no-store"});
+  if(r.ok){const j=await r.json();apartado=j&&typeof j==="object"?j:{};}}catch(e){}}
+// Disponible para pedir = existencia publicada − lo apartado por otros pedidos (sin límite si no se publicó la existencia)
+function disp(p){if(!p||p.a)return 0;if(p.s==null)return Infinity;return Math.max(0,Math.floor(Number(p.s)-(Number(apartado[p.c])||0)));}
+function marcarAgotados(){for(const p of prods)if(p.s!=null){p.a=disp({...p,a:0})<=0?1:undefined;}}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const r2=n=>Math.round((Number(n)||0)*100)/100;
@@ -141,13 +149,16 @@ const guardar=()=>{st.t=Date.now();try{localStorage.setItem(LS,JSON.stringify(st
 if(Object.keys(st.items||{}).length&&(!st.t||Date.now()-st.t>12*3600e3)){st.items={};st.nota="";if(!MODO_CLI)st.cli="";guardar();}
 const _pendiente=Object.keys(st.items||{}).length;
 
+function avisoTope(c,d){const el=document.querySelector(`.p[data-c="${CSS.escape(c)}"] .warn`);const t=d>0?`Solo quedan ${d} disponibles`:"Se agotó";
+  if(el){setTimeout(()=>{el.textContent=t;el.style.color="var(--bad,#b42318)";},0);}else alert(t);}
 function paso(p){return Number(p.q)>0?Number(p.q):1;}
 function avisoQty(p,n){const of=avisoOf(p,n),b=avisoQty0(p,n);return [b,of].filter(Boolean).join(" · ");}
 function avisoQty0(p,n){const q=Number(p.q);if(!(n>0)||!(q>1))return "";
   if(n<q)return `Menos de una caja (la caja trae ${q})`;
   if(n%q)return `No completa cajas: la caja trae ${q}`;return "";}
 
-function setQty(c,n){n=Math.max(0,Math.floor(Number(n)||0));if(n)st.items[c]=n;else delete st.items[c];guardar();pintarBar();
+function setQty(c,n){n=Math.max(0,Math.floor(Number(n)||0));
+  {const p=prods.find(x=>x.c===c),d=disp(p);if(n>d){n=d;avisoTope(c,d);}}if(n)st.items[c]=n;else delete st.items[c];guardar();pintarBar();
   const el=document.querySelector(`.p[data-c="${CSS.escape(c)}"]`);if(el){const p=prods.find(x=>x.c===c);el.classList.toggle("sel",n>0);const i=el.querySelector("input");if(document.activeElement!==i)i.value=n||"";const w=el.querySelector(".warn");w.textContent=avisoQty(p,n);}
   if(vista==="res")pintarRes();}
 
@@ -181,7 +192,7 @@ function pintarProds(){const q=$("#q").value.trim().toLowerCase();
       if(b.dataset.d==="1")n=cur<s?s:Math.floor(cur/s)*s+s;else n=cur%s?Math.floor(cur/s)*s:cur-s;setQty(c,Math.max(0,n));i.value=st.items[c]||"";});
     i.oninput=()=>setQty(c,i.value.replace(/\D/g,""));});}
 
-function items(){return Object.entries(st.items).map(([c,n])=>({p:prods.find(x=>x.c===c),n})).filter(x=>x.p&&!x.p.a&&x.n>0);}
+function items(){return Object.entries(st.items).map(([c,n])=>{const p=prods.find(x=>x.c===c);return {p,n:p?Math.min(n,disp(p)):0};}).filter(x=>x.p&&!x.p.a&&x.n>0);}
 function total(){return r2(items().reduce((s,x)=>s+pu(x.p,x.n)*x.n,0));}
 function pintarBar(){const it=items(),pz=it.reduce((s,x)=>s+x.n,0);
   $("#bar").classList.toggle("hidden",!it.length&&vista==="cat");
@@ -229,13 +240,20 @@ if(_pendiente){const b=$("#pendBox");b.classList.remove("hidden");
   $("#pendSeguir").onclick=()=>b.classList.add("hidden");$("#pendNuevo").onclick=empezarNuevo;}
 $("#vaciar").onclick=()=>{if(!confirm("¿Vaciar el pedido?"))return;st.items={};if(!MODO_CLI){st.cli="";$("#cli").value="";}st.nota="";$("#nota").value="";guardar();pintarProds();ver("cat");};
 $("#copiar").onclick=async()=>{if(!validar())return;try{await navigator.clipboard.writeText(texto());$("#copiar").textContent="✓ Copiado";setTimeout(()=>$("#copiar").textContent="Copiar pedido",2000);}catch(e){}};
-$("#enviar").onclick=()=>{if(!validar())return;window.open("https://wa.me/"+WA+"?text="+encodeURIComponent(texto()),"_blank");
+function registrarPedido(){const it=items();if(!it.length)return;
+  const body={origen:MODO_CLI?"cliente":"vendedor",vendedor:MODO_CLI?"":st.vend.trim().slice(0,200),cliente:st.cli.trim().slice(0,200),nota:st.nota.trim().slice(0,1000),total:total(),
+    items:it.map(({p,n})=>({c:p.c,r:p.r,d:p.d,u:p.u||"PZA",n,p:r2(pu(p,n))}))};
+  for(const {p,n} of it)apartado[p.c]=(Number(apartado[p.c])||0)+n;
+  try{fetch(SUPABASE_URL+"/rest/v1/pedidos_web",{method:"POST",keepalive:true,headers:{apikey:SB_KEY,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)}).catch(()=>{});}catch(e){}}
+$("#enviar").onclick=()=>{if(!validar())return;window.open("https://wa.me/"+WA+"?text="+encodeURIComponent(texto()),"_blank");registrarPedido();
   setTimeout(()=>{if(confirm(MODO_CLI?"¿Ya mandaste el pedido? Presiona Aceptar para empezar uno nuevo.":"¿Ya mandaste el pedido? Presiona Aceptar para empezar uno nuevo (tu nombre se queda guardado).")){st.items={};if(!MODO_CLI){st.cli="";$("#cli").value="";}st.nota="";$("#nota").value="";guardar();pintarProds();ver("cat");}},1500);};
 
 (async()=>{try{const r=await fetch(BASE+"catalogo-vendedores.json?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error(r.status);
-    const j=await r.json();prods=(j.productos||[]).filter(p=>p.c&&p.p>0);
-    const quitados=[];for(const c of Object.keys(st.items)){const p=prods.find(x=>x.c===c);if(!p||p.a){if(p)quitados.push(p.r);delete st.items[c];}}guardar();
-    if(quitados.length)setTimeout(()=>alert("Se quitaron de tu pedido porque se agotaron: "+quitados.join(", ")),300);
+    const j=await r.json();prods=(j.productos||[]).filter(p=>p.c&&p.p>0);await cargarApartado();marcarAgotados();
+    const quitados=[],bajados=[];for(const c of Object.keys(st.items)){const p=prods.find(x=>x.c===c);if(!p||p.a){if(p)quitados.push(p.r);delete st.items[c];}else if(st.items[c]>disp(p)){st.items[c]=disp(p);bajados.push(p.r+" (quedan "+disp(p)+")");}}guardar();
+    if(quitados.length||bajados.length)setTimeout(()=>alert([quitados.length?"Se quitaron de tu pedido porque se agotaron: "+quitados.join(", "):"",bajados.length?"Se bajó la cantidad porque no hay tantas: "+bajados.join(", "):""].filter(Boolean).join("\n\n")),300);
+    // cada minuto se revisa lo apartado por otros pedidos
+    setInterval(async()=>{await cargarApartado();marcarAgotados();if(vista==="cat")pintarProds();else pintarRes();pintarBar();},60000);
     $("#act").textContent=j.publicado?`Precios actualizados el ${fFecha(j.publicado)}`:"";
     $("#estado").classList.add("hidden");$("#cat").classList.remove("hidden");pintarMarcas();pintarProds();pintarBar();
   }catch(e){$("#estado").className="status err";$("#estado").textContent="No se pudieron cargar los productos. Revisa tu conexión y recarga la página. Si sigue igual, avisa a la oficina.";}})();

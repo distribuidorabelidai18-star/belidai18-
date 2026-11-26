@@ -797,6 +797,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <button type="button" data-pt="armar" aria-pressed="true">Pedido</button>
       <button type="button" data-pt="productos" aria-pressed="false">Productos</button>
       <button type="button" data-pt="historial" aria-pressed="false">Historial</button>
+      <button type="button" data-pt="web" aria-pressed="false" id="pwTab">Pedidos web</button>
     </div></div>
 
     <div class="sec" id="pt-armar">
@@ -828,6 +829,11 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
       <div id="prLista"></div>
     </div>
 
+    <div class="sec" id="pt-web" hidden>
+      <p class="note" style="margin:0">Pedidos que mandaron los vendedores y clientes desde la página de pedidos. Mientras están aquí, esas piezas quedan <b>apartadas</b>: la página ya no se las ofrece a otro. Pásalos a pedido o a nota de entrega; si no se van a despachar, cancélalos para liberar la mercancía.</p>
+      <div id="pwMsg" class="status" hidden></div>
+      <div id="pwLista"></div>
+    </div>
     <div class="sec" id="pt-historial" hidden>
       <div id="hiLista"></div>
       <form class="card" id="cfgPed" novalidate style="max-width:520px">
@@ -2757,9 +2763,44 @@ function renderPed(soloCfg){
   }
   if(pedTab==="productos")pintarProductos();
   if(pedTab==="historial")pintarHistorial();
+  if(pedTab==="web")pintarPedWeb();
 }
+/* ---------- Pedidos web (página de pedidos): apartan mercancía hasta que se procesan ---------- */
+var pedWeb=[],pwErr="",_pwT=null;
+async function cargarPedWeb(){const sb=window.SB;if(!sb||(typeof esVendedor==="function"&&esVendedor()))return;
+  try{const {data,error}=await sb.from("pedidos_web").select("*").eq("estado","pendiente").order("creado",{ascending:true}).limit(300);
+    if(error)pwErr=/pedidos_web|relation|schema cache|does not exist/i.test(error.message||"")?"falta":"err";else{pwErr="";pedWeb=data||[];}}catch(e){pwErr="err";}
+  pwBadge();if(sec==="pedido"&&pedTab==="web")pintarPedWeb();}
+function pwBadge(){const b=$("#pwTab");if(b)b.innerHTML=`Pedidos web${pedWeb.length?` <span class="badgeN">${pedWeb.length}</span>`:""}`;}
+async function marcarPedWeb(id,estado,destino){const sb=window.SB;if(!sb||!id)return;
+  const {error}=await sb.from("pedidos_web").update({estado,destino:destino||null,revisado:new Date().toISOString(),revisado_por:window.PERFIL?.email||""}).eq("id",id);
+  if(error)throw error;pedWeb=pedWeb.filter(x=>x.id!==id);pwBadge();cargarPedWeb();}
+function pwItems(o){return (o.items||[]).map(i=>({codigo:String(i.c||""),referencia:i.r||"",descripcion:i.d||"",unidad:i.u||"PZA",cantidad:Number(i.n)||1,precio:Number(i.p)||0}));}
+function pintarPedWeb(){const el=$("#pwLista");if(!el)return;
+  if(pwErr==="falta"){el.innerHTML=`<div class="list"><div class="empty"><strong>Falta activar los pedidos web</strong><span>Hay que pegar el archivo pedidos-web.sql en Supabase (SQL Editor → Run).</span></div></div>`;return;}
+  if(pwErr==="err"&&!pedWeb.length){el.innerHTML=`<div class="list"><div class="empty"><strong>No se pudieron cargar</strong><span>Revisa la conexión.</span></div></div>`;return;}
+  if(!pedWeb.length){el.innerHTML=`<div class="list"><div class="empty"><strong>No hay pedidos web pendientes</strong><span>✓ Todo procesado.</span></div></div>`;return;}
+  el.innerHTML=pedWeb.map(o=>{const its=pwItems(o);const cuando=new Date(o.creado);
+    return `<div class="card" data-pw="${esc(o.id)}" style="display:grid;gap:8px">
+      <div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap"><div style="min-width:0"><div class="cl" style="white-space:normal"><b>${esc(o.cliente||"")}</b></div>
+        <div class="sub">${o.origen==="cliente"?"Lo hizo el cliente":"Vendedor: <b>"+esc(o.vendedor||"—")+"</b>"} · ${cuando.toLocaleDateString("es-VE")} ${cuando.toLocaleTimeString("es-VE",{hour:"numeric",minute:"2-digit"})}</div></div>
+        <div style="text-align:right"><b class="num">${fmt(Number(o.total)||0)}</b><div class="sub">${its.length} producto${its.length>1?"s":""} · ${its.reduce((t,i)=>t+i.cantidad,0)} pzas</div></div></div>
+      <div class="list">${its.map(i=>{const ex=existencia(i.codigo);return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto;cursor:default"><span style="min-width:0"><div class="cl" style="white-space:normal">${esc(i.referencia)} · ${esc(i.descripcion)}</div>
+        <div class="sub">${i.cantidad} × ${fmt(i.precio)}${ex<i.cantidad?` · <b style="color:var(--bad)">⚠ en inventario hay ${Math.max(0,ex)}</b>`:""}</div></span><b class="num">${fmt(r2(i.cantidad*i.precio))}</b></div>`;}).join("")}</div>
+      ${o.nota?`<div class="note">Nota: ${esc(o.nota)}</div>`:""}
+      <div class="toolbar"><button type="button" class="ghost" data-a="cancel">Cancelar pedido</button><span class="spacer"></span><button type="button" data-a="ped">Pasar a pedido</button><button type="button" class="primary" data-a="ne">Pasar a nota de entrega</button></div>
+      <div class="status" data-k="msg" hidden></div></div>`;}).join("");
+  el.querySelectorAll("[data-pw]").forEach(card=>{const o=pedWeb.find(x=>x.id===card.dataset.pw);if(!o)return;const msg=t=>{const m=card.querySelector('[data-k="msg"]');m.className="status err";m.textContent=t;m.hidden=false;};
+    const notas=[o.origen==="cliente"?"Pedido web del cliente":"Pedido web · vendedor "+(o.vendedor||""),o.nota||""].filter(Boolean).join(". ");
+    card.querySelector('[data-a="cancel"]').onclick=async e=>{const b=e.target;if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Cancelar? Toca otra vez";setTimeout(()=>{b.textContent="Cancelar pedido";delete b.dataset.ok;},3000);return;}
+      b.disabled=true;try{await marcarPedWeb(o.id,"cancelado");}catch(er){b.disabled=false;msg("No se pudo cancelar. Intenta de nuevo.");}};
+    card.querySelector('[data-a="ped"]').onclick=e=>{const b=e.target;if(ped.items.length&&!b.dataset.ok){b.dataset.ok=1;b.textContent="Tienes un pedido a medio hacer. Toca otra vez para reemplazarlo";return;}
+      ped={cliente:o.cliente||"",despachador:"",notas,items:pwItems(o).map(({precio,...i})=>i),numero:"",webId:o.id};
+      $("#pdCli").value=ped.cliente;$("#pdDes").value="";$("#pdNot").value=ped.notas;guardarBorrador();abrirPedTab("armar");
+      pdMsg("Pedido web cargado. Revísalo y toca <b>Finalizar y guardar</b>: ahí sale de Pedidos web.","ok");};
+    card.querySelector('[data-a="ne"]').onclick=e=>neDesde({cliente:o.cliente||"",notas,items:pwItems(o),webId:o.id},e.target);});}
 function abrirPedTab(t){pedTab=t;document.querySelectorAll("#pdTabs [data-pt]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.pt===t)));
-  for(const k of ["armar","productos","historial"])$("#pt-"+k).hidden=k!==t;
+  for(const k of ["armar","productos","historial","web"])$("#pt-"+k).hidden=k!==t;if(t==="web")cargarPedWeb();
   if(t==="historial"){$("#cfPre").value=cfgPed.prefijo??"P-";$("#cfIni").value=cfgPed.inicio||1;cfPrev();}
   renderPed();if(t==="armar")pintarItems();}
 document.querySelectorAll("#pdTabs [data-pt]").forEach(b=>b.onclick=()=>abrirPedTab(b.dataset.pt));
@@ -2849,7 +2890,7 @@ $("#pdFin").onclick=async()=>{
     if(!ped.numero){let tries=0;while(tries<20&&(await db.doc("pedidos/"+numero.replace(/\//g,"-")).get()).exists){const m=numero.match(/^(.*-)(\d+)$/);numero=m[1]+String(+m[2]+1).padStart(2,"0");tries++;}}
     const ant=pedidos.find(x=>x.numero===numero);
     await db.doc("pedidos/"+numero.replace(/\//g,"-")).set({numero,cliente:ped.cliente.trim(),despachador:ped.despachador.trim(),notas:ped.notas.trim(),items:ped.items.map(i=>({...i,cantidad:Number(i.cantidad)||1})),fecha:ant?.fecha||hoy(),creado:ant?.creado||Date.now(),editado:ant?Date.now():null});
-    const guardado={...ped,numero,fecha:ant?.fecha||hoy()};
+    const guardado={...ped,numero,fecha:ant?.fecha||hoy()};if(ped.webId)marcarPedWeb(ped.webId,"procesado","Pedido "+numero).catch(e=>console.warn(e));
     ped={cliente:"",despachador:"",notas:"",items:[],numero:""};["#pdCli","#pdDes","#pdNot"].forEach(s=>$(s).value="");guardarBorrador();pintarItems();renderPed();
     pdMsg(`✓ Pedido <b>${esc(numero)}</b> guardado. <button class="linkbtn" type="button" id="pdReimp">Imprimir su packing list</button>`,"ok");
     $("#pdReimp").onclick=()=>imprimir(guardado);
@@ -3585,7 +3626,7 @@ $("#neScan").onsubmit=e=>{e.preventDefault();const code=$("#neCode").value.trim(
 $("#neVaciar").onclick=()=>{const b=$("#neVaciar");if(b.dataset.ok){ne=neVacia();cargarCamposNe();guardarNe();neMsg("");pintarNe();b.textContent="Vaciar";delete b.dataset.ok;}
   else{b.dataset.ok=1;b.textContent="¿Vaciar todo?";setTimeout(()=>{b.textContent="Vaciar";delete b.dataset.ok;},3000);}};
 function neDesde(o,btn){if(ne.items.length&&!btn.dataset.ok){btn.dataset.ok=1;btn.textContent="Ya tienes una nota a medio hacer. Toca otra vez para reemplazarla";return;}
-  ne={...neVacia(),cliente:o.cliente||"",notas:o.notas||"",pedidoId:o.pedidoId||"",cotizacion:o.cotizacion||"",
+  ne={...neVacia(),cliente:o.cliente||"",notas:o.notas||"",pedidoId:o.pedidoId||"",cotizacion:o.cotizacion||"",webId:o.webId||"",
     items:(o.items||[]).map(i=>{const p=productos.find(x=>String(x.codigo)===String(i.codigo));let pr=Number(i.precio);if(!(pr>0)&&p){const s_=precioPara(p,o.cliente);pr=s_?s_.v:0;}
       return {codigo:i.codigo,referencia:i.referencia||"",descripcion:i.descripcion||"",unidad:i.unidad||"PZA",cantidad:Number(i.cantidad)||1,precio:pr||0,...(descDe(i)?{desc:descDe(i)}:{})};})};
   const c=cliMaestro(ne.cliente,"");if(c){ne.rif=c.rif||"";ne.vendedor=c.vendedor||"";ne.vence=venceSegun(c,ne.fecha);}else ne.vence=venceSegun(null,ne.fecha);
@@ -3677,6 +3718,7 @@ $("#neGuardar").onclick=async()=>{const b=$("#neGuardar");
     const fa=facturas.find(f=>f.id==="p"+id)||{};const fd={...fa,cliente:doc.cliente,rif,vendedor:doc.vendedor,numero,fecha:doc.fecha,vencimiento:doc.vence,moneda:"USD",montoOriginal:doc.total,tasa:null,montoUSD:doc.total,origen:fa.origen||"programa",notaId:id,imagen:fa.imagen||"",creado:fa.creado||Date.now()};delete fd.id;
     await db.doc("facturas/p"+id).set(fd);
     if(!ant&&/^\d+$/.test(numero)&&(!neUltNum||+numero>+neUltNum))neUltNum=numero;
+    if(ne.webId)marcarPedWeb(ne.webId,"procesado","Nota "+numero).catch(e=>console.warn(e));
     ne=neVacia();guardarNe();cargarCamposNe();pintarNe();renderNe();
     neMsg(`✓ Nota <b>N° ${esc(numero)}</b> guardada y pasada a cuentas por cobrar. <button class="linkbtn" type="button" id="neAbrir">Descargar su PDF</button>`,"ok");
     $("#neAbrir").onclick=()=>verNeHoja({...doc,id},true);}
@@ -3712,7 +3754,7 @@ function abrirPubVend(){
     m.hidden=false;b.disabled=false;b.textContent="Publicar ahora";};}
 function listaCatalogo(){return productos.filter(p=>p.enLista!==false&&Number(p.precio)>0).sort(ordenMarca);}
 function catalogoProds(lista){const st=stockMap();
-  return lista.map(p=>{const c=String(p.codigo||p.id||"");const o={c,r:p.referencia||"",d:p.descripcion||"",m:marcaDe(p),p:r2(Number(p.precio)),q:Number(p.moq)>0?Number(p.moq):null,u:p.unidad||"",f:p.foto||null};if(!((st[c]||0)>0))o.a=1;
+  return lista.map(p=>{const c=String(p.codigo||p.id||"");const o={c,r:p.referencia||"",d:p.descripcion||"",m:marcaDe(p),p:r2(Number(p.precio)),q:Number(p.moq)>0?Number(p.moq):null,u:p.unidad||"",f:p.foto||null,s:Math.max(0,Math.floor(st[c]||0))};if(!((st[c]||0)>0))o.a=1;
     const of=ofertaDe(c,{vigentes:true});if(of)o.o={p:r2(of.it.precio),n:Math.max(1,Number(of.it.minimo)||1),d:of.o.desde||"",h:of.o.hasta||"",t:of.o.nombre||"Oferta",...(isFinite(of.rest)?{r:of.rest}:{})};return o;});}
 async function publicarCatalogo(lista){
   const sb=window.SB;if(!sb)throw new Error("sin conexión");
@@ -4098,6 +4140,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
   db.collection("clientes").onSnapshot(s=>{clientes=s.docs.map(d=>({id:d.id,...d.data()}));loadedCli=true;renderClientes();},()=>{loadedCli=true;renderClientes();});
   db.collection("productos").onSnapshot(s=>{productos=s.docs.map(d=>({id:d.id,...d.data()}));loadedProd=true;renderPed();renderInv();renderCot();renderPrecios();programarPub();},()=>{loadedProd=true;renderPed();renderPrecios();});
   db.collection("pedidos").onSnapshot(s=>{pedidos=s.docs.map(d=>({id:d.id,...d.data()}));loadedPed=true;renderPed();renderInv();programarPub();},()=>{loadedPed=true;renderPed();});
+  setTimeout(cargarPedWeb,3000);clearInterval(_pwT);_pwT=setInterval(cargarPedWeb,60000);
   db.collection("cotizaciones").onSnapshot(s=>{cotizaciones=s.docs.map(d=>({id:d.id,...d.data()}));loadedCot=true;renderCot();},()=>{loadedCot=true;renderCot();});
   db.doc("config/reposicion").onSnapshot(s=>{repoCfg={marcas:{},...(s.exists?s.data():{})};renderInv();},()=>{});
   db.doc("config/pedidos").onSnapshot(s=>{if(s.exists)cfgPed={prefijo:"P-",inicio:1,...s.data()};renderPed(true);},()=>{});
