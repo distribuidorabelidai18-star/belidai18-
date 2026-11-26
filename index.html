@@ -1482,6 +1482,8 @@ function renderDetalle(first){
   </div>
   ${(()=>{const pv=pagosVend.filter(x=>x.facturaId===f.id&&(x.estado==="pendiente"||x.estado==="rechazado")).sort((a,b)=>(b.creado||0)-(a.creado||0)).slice(0,5);
     return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}${x.estado==="pendiente"?` <button type="button" class="linkbtn" data-recpv="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</div>`).join("")}</div>`:"";})()}
+  ${f.saldo>0&&favTotal(f)>0?`<div class="card" style="gap:8px;background:#ecf8f0;border-color:#a9dcb9"><div><b>💚 ${esc(f.cliente)} tiene ${fmt(favTotal(f))} de saldo a favor</b><div class="note">Lo pagó de más antes. Puedes usarlo para esta nota.</div></div>
+    ${esDueno?`<div class="toolbar" style="margin:0"><button type="button" class="primary" id="favAplicar">Aplicar ${fmt(Math.min(f.saldo,favTotal(f)))} a esta nota</button></div><div id="favMsg" class="status" hidden></div>`:`<div class="note">El dueño puede aplicarlo desde aquí.</div>`}</div>`:""}
   ${canWrite&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
     <h3 style="font-size:1.05rem">${esDueno?"Registrar abono":"Registrar pago"}</h3>${esDueno?"":`<div class="note">El pago queda <b>por aprobar</b>: el dueño lo revisa y, al aprobarlo, se descuenta del saldo.</div>`}
     <div class="chips" role="group" aria-label="Forma de pago">${METODOS.map(m=>`<button type="button" data-m="${m.id}" aria-pressed="${m.id===metodoSel}">${esc(m.nombre)}</button>`).join("")}</div>
@@ -1528,6 +1530,9 @@ function renderDetalle(first){
   for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
     try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
   $("#verHist").onclick=()=>abrirCliente(ck(f));
+  const fv=$("#favAplicar");if(fv)fv.onclick=async()=>{fv.disabled=true;fv.textContent="Aplicando…";
+    try{await aplicarFavor(f);msgAbono=`Saldo a favor aplicado a la nota ${f.numero||""}.`;renderDetalle(false);}
+    catch(e){console.error(e);fv.disabled=false;fv.textContent="Aplicar saldo a favor";const m=$("#favMsg");m.className="status err";m.textContent="No se pudo aplicar. Intenta de nuevo.";m.hidden=false;}};
   const fa=$("#fAbono");
   if(fa){
     fa.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{metodoSel=b.dataset.m;renderDetalle(false);if(metodoSel==="bs")$("#aMonto").value="";});
@@ -1589,21 +1594,25 @@ async function guardarAbono(f){
   if(!(m>0))return fail("Escribe el monto del abono.");
   if(bs&&!(t>0))return fail("Escribe la tasa del día para pasar los bolívares a dólares.");
   const usd=r2(m/t);const btn=$("#aGuardar");const lbl=esDueno?"Registrar abono":"Enviar para aprobar";
-  let partes=[{f,usd:Math.min(usd,f.saldo)}];
+  let partes=[{f,usd:Math.min(usd,f.saldo)}],sobra=0,completo=false;
   if(usd>f.saldo+0.01){const r=repartoPago(f,usd);
-    if(r.sobra){delete btn.dataset.rep;btn.textContent=lbl;return fail(`El pago (${fmt(usd)}) es mayor que todo lo que debe ${f.cliente} (${fmt(r2(usd-r.sobra))}). Sobran ${fmt(r.sobra)}: revisa el monto.`);}
-    const firma=usd+"|"+r.partes.map(p=>p.f.id+":"+p.usd).join(",");
+    /* Pago mayor que todo lo que debe: Carmen/Skarlet lo mandan completo por aprobar (al aprobarlo se reparte y lo que sobre queda a favor);
+       el dueño lo registra repartido y lo que sobre queda como saldo a favor del cliente. */
+    if(r.sobra&&!esDueno)completo=true;else sobra=r.sobra;
+    const firma=usd+"|"+(completo?"todo":r.partes.map(p=>p.f.id+":"+p.usd).join(",")+"|"+sobra);
     if(btn.dataset.rep!==firma){btn.dataset.rep=firma;btn.textContent="Confirmar y "+(esDueno?"registrar":"enviar");
-      err.innerHTML=`El pago de <b>${fmt(usd)}</b> es mayor que el saldo de esta nota, así que se reparte entre las notas de ${esc(f.cliente)}:<br>`+
+      err.innerHTML=completo?`El pago de <b>${fmt(usd)}</b> es mayor que todo lo que debe ${esc(f.cliente)} (${fmt(r2(usd-r.sobra))}). Se envía <b>completo</b> por aprobar: al aprobarlo, se reparte entre sus notas y lo que sobre (${fmt(r.sobra)}) queda como <b>saldo a favor</b> para sus próximas compras.<br>Si está bien, toca <b>Confirmar</b>; si el monto está mal, corrígelo.`
+        :`El pago de <b>${fmt(usd)}</b> es mayor que el saldo de esta nota, así que se reparte entre las notas de ${esc(f.cliente)}:<br>`+
         r.partes.map(p=>`• Nota <b>${esc(p.f.numero||"—")}</b>${p.f.fecha?" del "+fFecha(p.f.fecha):""}: ${fmt(p.usd)}${p.usd>=saldoDisp(p.f)-0.009?" (la deja pagada)":" (abono)"}`).join("<br>")+
+        (sobra?`<br>• <b>Saldo a favor del cliente: ${fmt(sobra)}</b> (se usa en sus próximas notas)`:"")+
         `<br>Si está bien, toca <b>Confirmar</b>.`;err.className="status";err.hidden=false;return;}
-    partes=r.partes;}
+    partes=completo?[{f,usd}]:r.partes;}
   delete btn.dataset.rep;
   btn.disabled=true;btn.textContent="Guardando…";$("#aTotal").disabled=true;
   const grupo=partes.length>1?"g"+Date.now().toString(36):null;
   const comun=i=>({metodo:metodoSel,moneda:bs?"Bs":"USD",tasa:bs?t:null,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now()+i,
     ...(grupo?{grupo,pagoTotalUSD:usd,parte:(i+1)+" de "+partes.length}:{})});
-  const montoOrig=p=>partes.length>1?r2(p.usd*t):r2(m);
+  const montoOrig=p=>(partes.length>1||sobra)?r2(p.usd*t):r2(m);
   const resumen=()=>partes.length>1?` repartido en ${partes.length} notas (${partes.map(p=>(p.f.numero||"—")+": "+fmt(p.usd)).join(" · ")})`:"";
   if(!esDueno){
     try{let foto=null;const file=$("#aFoto")?.files?.[0];if(file){let fo;try{fo=await achicarImg(file,1600,.85);}catch(e){fo=file;}foto=(await assets.upload(fo)).id;}
@@ -1619,8 +1628,9 @@ async function guardarAbono(f){
     for(const p of partes){const x=p.f;
       const abDoc={facturaId:x.id,cliente:x.cliente,montoOriginal:montoOrig(p),montoUSD:p.usd,...comun(i++)};
       const rab=await db.collection("abonos").add(abDoc);if(x.id===f.id)ultRecibo={t:"abono",id:rab?.id,doc:{id:rab?.id,...abDoc}};}
+    if(sobra)await db.collection("saldosFavor").add({cliente:f.cliente||"",rif:f.rif||"",montoUSD:sobra,restante:sobra,metodo:metodoSel,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now(),usos:[]});
     const mn=METODOS.find(x=>x.id===metodoSel)?.nombre||metodoSel;
-    msgAbono=`Abono de ${fmt(partes.reduce((a,p)=>a+p.usd,0))} por ${mn} registrado${resumen()}.`;
+    msgAbono=`Abono de ${fmt(partes.reduce((a,p)=>a+p.usd,0))} por ${mn} registrado${resumen()}.${sobra?` Quedan ${fmt(sobra)} como saldo a favor del cliente.`:""}`;
     $("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
   }catch(e){btn.disabled=false;$("#aTotal").disabled=false;btn.textContent=lbl;fail(e?.code==="invalid_argument"?"No tienes permiso para registrar abonos aquí.":"No se pudo guardar el abono. Intenta de nuevo.");}
 }
@@ -2067,6 +2077,16 @@ $("#btnEdoVend2").onclick=()=>abrirEdoVend("");
 
 /* ---------- Pagos reportados por los vendedores ---------- */
 var pagosVend=[],loadedPV=false;
+/* Saldo a favor: lo que un cliente pagó de más y se usa en sus próximas notas */
+var saldosFav=[];
+const favDe=f=>saldosFav.filter(x=>(Number(x.restante)||0)>0.009&&mismoCliPago(x,f)).sort((a,b)=>(a.creado||0)-(b.creado||0));
+const favTotal=f=>r2(favDe(f).reduce((t,x)=>t+(Number(x.restante)||0),0));
+async function aplicarFavor(f,msgEl){const lista=favDe(f);let falta=r2(Math.min(f.saldo,favTotal(f)));if(!(falta>0))return;
+  for(const x of lista){if(falta<=0.009)break;const m=r2(Math.min(falta,Number(x.restante)||0));if(!(m>0))continue;
+    await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:x.metodo||"efectivo",moneda:"USD",montoOriginal:m,montoUSD:m,tasa:null,
+      referencia:("Saldo a favor"+(x.referencia?" · ref. "+x.referencia:"")).slice(0,120),fecha:hoy(),creado:Date.now(),saldoFavorId:x.id});
+    await db.doc("saldosFavor/"+x.id).update({restante:r2((Number(x.restante)||0)-m),usos:[...(x.usos||[]),{facturaId:f.id,numero:f.numero||"",montoUSD:m,fecha:hoy()}]});
+    falta=r2(falta-m);}}
 const esVendedor=()=>window.PERFIL?.rol==="vendedor";
 const kV=x=>String(x||"").trim().toUpperCase();
 function miVendedor(){const p=kV(window.PERFIL?.vendedor);if(!p)return "";
@@ -2167,7 +2187,7 @@ function pintarPorAprobar(){
   el.querySelectorAll(".pvCard[data-pv]").forEach(card=>{const x=pagosVend.find(p=>p.id===card.dataset.pv);if(!x)return;const q=k=>card.querySelector(`[data-k="${k}"]`);
     const usd=()=>{const m=num(q("m").value),t=x.moneda==="Bs"?num(q("t").value):1;return m>0&&t>0?r2(m/t):0;};
     card.querySelectorAll('input[data-k="m"],input[data-k="t"]').forEach(i=>i.oninput=()=>{q("u").innerHTML=`= <b>${fmt(usd())}</b>`;});
-    const fail=t=>{q("err").textContent=t;q("err").hidden=false;};
+    const fail=t=>{q("err").className="err";q("err").textContent=t;q("err").hidden=false;};
     card.querySelector('[data-a="no"]').onclick=async e=>{const b=e.target;b.disabled=true;
       try{await db.doc("pagosVend/"+x.id).update({estado:"rechazado",motivo:q("mot").value.trim(),revisado:Date.now()});}catch(er){b.disabled=false;fail("No se pudo guardar. Intenta de nuevo.");}};
     card.querySelector('[data-a="si"]').onclick=async e=>{const b=e.target;q("err").hidden=true;
@@ -2175,11 +2195,22 @@ function pintarPorAprobar(){
       const m=num(q("m").value),t=x.moneda==="Bs"?num(q("t").value):1,u=usd();
       if(!(u>0))return fail("Revisa el monto y la tasa.");
       if(f.saldo<=0)return fail("Esta nota ya está pagada.");
-      if(u>f.saldo+0.01)return fail(`El pago (${fmt(u)}) es mayor que el saldo de la nota (${fmt(f.saldo)}). Corrige el monto o la tasa.`);
-      b.disabled=true;b.textContent="Aprobando…";
-      try{const ab=await db.collection("abonos").add({facturaId:f.id,cliente:f.cliente,metodo:x.metodo,montoOriginal:r2(m),moneda:x.moneda,tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),
-          referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now(),comprobante:x.foto||null,reportadoPor:x.reportadoPor||x.vendedor||"",pagoVendId:x.id});
-        await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:ab.id,facturaId:f.id,numero:f.numero||x.numero||"",montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:Math.min(u,f.saldo),revisado:Date.now()});
+      /* Pago mayor que el saldo: el resto va a las otras notas del cliente y lo que sobre queda como saldo a favor */
+      let partes=[{f,usd:r2(Math.min(u,f.saldo))}],sobra=0;
+      if(u>f.saldo+0.01){const r=repartoPago(f,u);partes=r.partes;sobra=r.sobra;
+        const firma=u+"|"+partes.map(p=>p.f.id+":"+p.usd).join(",")+"|"+sobra;
+        if(b.dataset.rep!==firma){b.dataset.rep=firma;b.textContent="Confirmar y aprobar";const e=q("err");e.className="status";
+          e.innerHTML=`El pago de <b>${fmt(u)}</b> es mayor que el saldo de esta nota (${fmt(f.saldo)}). Se aplica así:<br>`+
+            partes.map(p=>`• Nota <b>${esc(p.f.numero||"—")}</b>: ${fmt(p.usd)}${p.usd>=p.f.saldo-0.009?" (la deja pagada)":" (abono)"}`).join("<br>")+
+            (sobra?`<br>• <b>Saldo a favor del cliente: ${fmt(sobra)}</b> (se usa en sus próximas notas)`:"")+`<br>Si está bien, toca <b>Confirmar y aprobar</b>. Si el monto está mal, corrígelo arriba.`;e.hidden=false;return;}}
+      delete b.dataset.rep;b.disabled=true;b.textContent="Aprobando…";
+      try{let primero=null,i=0;const n=partes.length+(sobra?1:0);
+        for(const p of partes){const ab=await db.collection("abonos").add({facturaId:p.f.id,cliente:p.f.cliente,metodo:x.metodo,montoOriginal:n>1?r2(p.usd*t):r2(m),moneda:x.moneda,tasa:x.moneda==="Bs"?t:null,montoUSD:p.usd,
+            referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now()+i,comprobante:x.foto||null,reportadoPor:x.reportadoPor||x.vendedor||"",pagoVendId:x.id,...(n>1?{parte:(++i)+" de "+n,pagoTotalUSD:u}:{})});
+          if(!primero)primero=ab;}
+        let favId=null;if(sobra){const fv=await db.collection("saldosFavor").add({cliente:f.cliente||x.cliente||"",rif:f.rif||"",montoUSD:sobra,restante:sobra,metodo:x.metodo,referencia:x.referencia||"",fecha:x.fecha||hoy(),creado:Date.now(),pagoVendId:x.id,usos:[]});favId=fv?.id||null;}
+        await db.doc("pagosVend/"+x.id).update({estado:"aprobado",abonoId:primero?.id||null,facturaId:f.id,numero:f.numero||x.numero||"",montoOriginal:r2(m),tasa:x.moneda==="Bs"?t:null,montoUSD:u,revisado:Date.now(),
+          ...(n>1?{repartido:partes.map(p=>({facturaId:p.f.id,numero:p.f.numero||"",montoUSD:p.usd})),saldoFavor:sobra||0,saldoFavorId:favId}:{})});
       }catch(er){console.error(er);b.disabled=false;b.textContent="✓ Aprobar";fail("No se pudo aprobar. Intenta de nuevo.");}};});}
 $("#btnPorAprobar").onclick=abrirPorAprobar;
 
@@ -3786,8 +3817,9 @@ $("#neGuardar").onclick=async()=>{const b=$("#neGuardar");
     await db.doc("facturas/p"+id).set(fd);
     if(!ant&&/^\d+$/.test(numero)&&(!neUltNum||+numero>+neUltNum))neUltNum=numero;
     if(ne.webId)marcarPedWeb(ne.webId,"procesado","Nota "+numero).catch(e=>console.warn(e));
+    const favN=favTotal({cliente:ne.cliente,rif:ne.rif});
     ne=neVacia();guardarNe();cargarCamposNe();pintarNe();renderNe();
-    neMsg(`✓ Nota <b>N° ${esc(numero)}</b> guardada y pasada a cuentas por cobrar. <button class="linkbtn" type="button" id="neAbrir">Descargar su PDF</button>`,"ok");
+    neMsg(`✓ Nota <b>N° ${esc(numero)}</b> guardada y pasada a cuentas por cobrar. <button class="linkbtn" type="button" id="neAbrir">Descargar su PDF</button>${favN>0?`<br>💚 Este cliente tiene <b>${fmt(favN)}</b> de saldo a favor: abre la nota en Cuentas por cobrar y toca <b>Aplicar</b>.`:""}`,"ok");
     $("#neAbrir").onclick=()=>verNeHoja({...doc,id},true);}
   catch(e){console.error(e);neMsg("No se pudo guardar la nota. Revisa la conexión e intenta de nuevo.","err");}
   b.disabled=false;b.textContent="Guardar nota";};
@@ -4197,6 +4229,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;$('.side [data-sec="ofe"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="ofe")ir("ofe");}catch(e){}}
   if(!esVendedor()){$('.side [data-sec="rep"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="rep")ir("rep");}catch(e){}}
+  db.collection("saldosFavor").onSnapshot(s=>{saldosFav=s.docs.map(d=>({id:d.id,...d.data()}));if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{});
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();renderRep();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
   if(canWrite&&!esVendedor())_pubOn=true; // Carmen y Skarlet también actualizan la lista de pedidos al hacer notas
   if(!esDueno&&canWrite&&!esVendedor()){const r=$("#rol");r.textContent="Tu acceso: cargar notas de entrega, registrar pagos y hacer notas de crédito. Los pagos y las notas de crédito quedan por aprobar hasta que el dueño los revise.";r.hidden=false;}
