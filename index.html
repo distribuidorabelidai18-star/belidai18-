@@ -1485,7 +1485,7 @@ function renderDetalle(first){
   ${f.saldo>0&&favTotal(f)>0?`<div class="card" style="gap:8px;background:#ecf8f0;border-color:#a9dcb9"><div><b>💚 ${esc(f.cliente)} tiene ${fmt(favTotal(f))} de saldo a favor</b><div class="note">Lo pagó de más antes. Puedes usarlo para esta nota.</div></div>
     ${esDueno?`<div class="toolbar" style="margin:0"><button type="button" class="primary" id="favAplicar">Aplicar ${fmt(Math.min(f.saldo,favTotal(f)))} a esta nota</button></div><div id="favMsg" class="status" hidden></div>`:`<div class="note">El dueño puede aplicarlo desde aquí.</div>`}</div>`:""}
   ${canWrite&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
-    <h3 style="font-size:1.05rem">${esDueno?"Registrar abono":"Registrar pago"}</h3>${esDueno?"":`<div class="note">El pago queda <b>por aprobar</b>: el dueño lo revisa y, al aprobarlo, se descuenta del saldo.</div>`}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="font-size:1.05rem">${esDueno?"Registrar abono":"Registrar pago"}</h3>${saldos().filter(x=>x.saldo>0.009&&mismoCliPago(x,f)).length>1?`<span class="spacer"></span><button type="button" id="aVarias">🧾 Pagar varias notas de este cliente</button>`:""}</div>${esDueno?"":`<div class="note">El pago queda <b>por aprobar</b>: el dueño lo revisa y, al aprobarlo, se descuenta del saldo.</div>`}
     <div class="chips" role="group" aria-label="Forma de pago">${METODOS.map(m=>`<button type="button" data-m="${m.id}" aria-pressed="${m.id===metodoSel}">${esc(m.nombre)}</button>`).join("")}</div>
     <div class="grid2">
       <label class="f" id="lMonto">${metodoSel==="bs"?"Monto en Bs":"Monto en $"}<input id="aMonto" inputmode="decimal" placeholder="0,00"></label>
@@ -1531,6 +1531,7 @@ function renderDetalle(first){
   for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
     try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
   $("#verHist").onclick=()=>abrirCliente(ck(f));
+  const av=$("#aVarias");if(av)av.onclick=()=>abrirPagoVarias(f);
   const fv=$("#favAplicar");if(fv)fv.onclick=async()=>{fv.disabled=true;fv.textContent="Aplicando…";
     try{await aplicarFavor(f);msgAbono=`Saldo a favor aplicado a la nota ${f.numero||""}.`;renderDetalle(false);}
     catch(e){console.error(e);fv.disabled=false;fv.textContent="Aplicar saldo a favor";const m=$("#favMsg");m.className="status err";m.textContent="No se pudo aplicar. Intenta de nuevo.";m.hidden=false;}};
@@ -1610,7 +1611,7 @@ async function guardarAbono(f){
     partes=completo?[{f,usd}]:r.partes;}
   delete btn.dataset.rep;
   btn.disabled=true;btn.textContent="Guardando…";$("#aTotal").disabled=true;
-  const grupo=partes.length>1?"g"+Date.now().toString(36):null;
+  const grupo=(partes.length>1||sobra)?"g"+Date.now().toString(36):null;
   const comun=i=>({metodo:metodoSel,moneda:bs?"Bs":"USD",tasa:bs?t:null,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now()+i,
     ...(grupo?{grupo,pagoTotalUSD:usd,parte:(i+1)+" de "+partes.length}:{})});
   const montoOrig=p=>(partes.length>1||sobra)?r2(p.usd*t):r2(m);
@@ -1629,7 +1630,7 @@ async function guardarAbono(f){
     for(const p of partes){const x=p.f;
       const abDoc={facturaId:x.id,cliente:x.cliente,montoOriginal:montoOrig(p),montoUSD:p.usd,...comun(i++)};
       const rab=await db.collection("abonos").add(abDoc);if(x.id===f.id)ultRecibo={t:"abono",id:rab?.id,doc:{id:rab?.id,...abDoc}};}
-    if(sobra)await db.collection("saldosFavor").add({cliente:f.cliente||"",rif:f.rif||"",montoUSD:sobra,restante:sobra,metodo:metodoSel,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now(),usos:[]});
+    if(sobra)await db.collection("saldosFavor").add({grupo,cliente:f.cliente||"",rif:f.rif||"",montoUSD:sobra,restante:sobra,metodo:metodoSel,referencia:$("#aRef").value.trim(),fecha:$("#aFecha").value||hoy(),creado:Date.now(),usos:[]});
     const mn=METODOS.find(x=>x.id===metodoSel)?.nombre||metodoSel;
     msgAbono=`Abono de ${fmt(partes.reduce((a,p)=>a+p.usd,0))} por ${mn} registrado${resumen()}.${sobra?` Quedan ${fmt(sobra)} como saldo a favor del cliente.`:""}`;
     $("#aMonto").value="";$("#aRef").value="";renderDetalle(false);
@@ -2361,7 +2362,7 @@ function abrirNC(fid){const f=saldos().find(x=>x.id===fid);if(!f)return;const nt
           <div class="list">${its.map((i,k)=>{const max=(Number(i.cantidad)||0)-(dev[i.codigo]||0);return `<div class="prow" style="grid-template-columns:minmax(0,1fr) auto 5.5rem;align-items:center"><span style="min-width:0"><div class="cl">${esc(i.referencia||i.codigo)}</div><div class="sub">${esc(i.descripcion||"")} · vendió ${Number(i.cantidad)||0}${dev[i.codigo]?` · ya devolvió ${dev[i.codigo]}`:""} · ${fmt(unit(i))} c/u</div></span>
             <span class="num sub" data-sub="${k}"></span><input data-q="${k}" inputmode="numeric" placeholder="0" aria-label="Unidades devueltas de ${esc(i.referencia||i.codigo)}" ${max<=0?"disabled":""} data-max="${max}" value="${ncF.q[k]||""}"></div>`;}).join("")}</div>
           <label class="f" style="display:flex;gap:8px;align-items:center;font-weight:500;color:var(--ink)"><input type="checkbox" id="ncInv" checked style="width:auto"> La mercancía vuelve al inventario</label>`
-        :`<label class="f">Monto de la nota de crédito ($)<input id="ncMonto" inputmode="decimal" placeholder="0,00"></label>${ncF.mot==="devolucion"?'<div class="note">Esta nota no se hizo en el programa (no tiene productos), así que escribe el monto y en el detalle qué devolvió.</div>':""}`}
+        :`${ncF.mot==="descuento"?`<label class="f">% de descuento sobre lo que debe (${fmt(f.saldo)})<input id="ncPct" inputmode="text" autocomplete="off" placeholder="Ej: 10 · 35 · 30+10"></label>`:""}<label class="f">Monto de la nota de crédito ($)<input id="ncMonto" inputmode="decimal" placeholder="0,00"></label>${ncF.mot==="devolucion"?'<div class="note">Esta nota no se hizo en el programa (no tiene productos), así que escribe el monto y en el detalle qué devolvió.</div>':""}`}
         <div class="grid2"><label class="f">Fecha<input id="ncFecha" type="date" value="${hoy()}"></label><label class="f">Número<input id="ncNum" value="${ncSiguiente()}"></label></div>
         <label class="f">Detalle (opcional)<textarea id="ncDet" placeholder="Ej: producto defectuoso, descuento acordado por pronto pago…"></textarea></label>
         <div class="totals" style="grid-template-columns:1fr 1fr"><div><span class="eyebrow">Monto</span><span class="num" id="ncTot" style="font-weight:600">$0,00</span></div><div><span class="eyebrow">Saldo queda en</span><span class="num" id="ncQueda">${fmt(f.saldo)}</span></div></div>
@@ -2371,7 +2372,12 @@ function abrirNC(fid){const f=saldos().find(x=>x.id===fid);if(!f)return;const nt
     const tot=()=>{let t=0;if(conIt){document.querySelectorAll("[data-q]").forEach(inp=>{const k=+inp.dataset.q,max=+inp.dataset.max;let n=Math.floor(num(inp.value)||0);if(n>max){n=max;inp.value=max;}ncF.q[k]=n;const sb=r2(n*unit(its[k]));inp.closest(".prow").querySelector("[data-sub]").textContent=n?fmt(sb):"";t+=sb;});}else t=num($("#ncMonto").value)||0;
       t=r2(t);$("#ncTot").textContent=fmt(t);$("#ncQueda").textContent=fmt(Math.max(0,f.saldo-t));return t;};
     document.querySelectorAll("[data-mot]").forEach(b=>b.onclick=()=>{ncF.mot=b.dataset.mot;pinta();});
-    document.querySelectorAll("[data-q]").forEach(i=>i.oninput=tot);$("#ncMonto")&&($("#ncMonto").oninput=tot);tot();
+    document.querySelectorAll("[data-q]").forEach(i=>i.oninput=tot);$("#ncMonto")&&($("#ncMonto").oninput=tot);
+    /* Descuento en %: "30+10" se aplica en cascada (30% y luego 10% sobre lo que queda = 37%) */
+    $("#ncPct")&&($("#ncPct").oninput=()=>{const ps=String($("#ncPct").value).split("+").map(v=>num(v)).filter(v=>v>0&&v<100);if(!ps.length)return;
+      const queda=ps.reduce((q,v)=>q*(1-v/100),1);$("#ncMonto").value=String(r2(f.saldo*(1-queda))).replace(".",",");
+      const d=$("#ncDet");if(d&&(!d.value||d.dataset.auto)){d.value="Descuento "+ps.join("% + ")+"%"+(ps.length>1?" ("+r2((1-queda)*100)+"% total)":"");d.dataset.auto=1;}tot();});
+    tot();
     $("#ncGo").onclick=async()=>{const e=$("#ncErr"),fail=t=>{e.textContent=t;e.hidden=false;};e.hidden=true;const t=tot();
       if(!(t>0))return fail(conIt?"Escribe cuántas unidades devuelve.":"Escribe el monto.");
       if(t>f.saldo+0.009)return fail(`El monto (${fmt(t)}) es mayor que el saldo de la nota (${fmt(f.saldo)}). Si el cliente ya pagó, avísame para manejar el saldo a favor.`);
@@ -2399,6 +2405,53 @@ function pdfNC(c,msgEl){const f=facturas.find(x=>x.id===c.facturaId)||{};
     d.text(`Este monto se descuenta del saldo de la nota N° ${c.notaNumero||f.numero||""}.${sal?" Saldo actual de la nota: "+fmtP(sal.saldo)+".":""}`,s.M,s.y);return d.output("blob");},msgEl||$("#ncMsg")||null);}
 /* ---------- Recibos imprimibles (pago o nota de crédito) ----------
    Media hoja (A5 horizontal) con una copia; se engrapa a la nota del cliente. */
+/* ---------- Un pago para varias notas del mismo cliente: se eligen las notas y sale un solo recibo ---------- */
+function abrirPagoVarias(f0){const notas=saldos().filter(x=>x.saldo>0.009&&mismoCliPago(x,f0)).sort((a,b)=>String(a.fecha||"").localeCompare(String(b.fecha||""))||String(a.numero||"").localeCompare(String(b.numero||""),"es",{numeric:true}));
+  let met=metodoSel||"zelle";const sel={};sel[f0.id]=r2(saldoDisp(f0));
+  const vuelve=()=>abrirDetalle(f0.id);
+  const pint=()=>{const bs=met==="bs";
+    panel(`<div class="ph"><div style="min-width:0"><div class="eyebrow">${esc(f0.cliente)}</div><h2>Pagar varias notas</h2><div class="note">Marca las notas que paga el cliente con este pago. Sale un solo recibo con todas.</div></div><button class="ghost" type="button" id="pvX" aria-label="Volver">✕</button></div>
+    <div class="list">${notas.map(x=>{const d=r2(saldoDisp(x)),on=sel[x.id]!=null;return `<label class="row" style="grid-template-columns:auto minmax(0,1fr) auto;align-items:center;cursor:pointer">
+      <input type="checkbox" data-vn="${esc(x.id)}" ${on?"checked":""} ${d<=0.009?"disabled":""} style="width:22px;height:22px">
+      <span style="min-width:0"><div class="cl">Nota ${esc(x.numero||"—")}${x.fecha?" · "+fFecha(x.fecha):""}</div><div class="sub">Debe ${fmt(x.saldo)}${d<x.saldo-0.009?` · ${fmt(r2(x.saldo-d))} ya reportado por aprobar`:""}</div></span>
+      <input data-vm="${esc(x.id)}" inputmode="decimal" value="${on?String(sel[x.id]).replace(".",","):""}" ${on?"":"disabled"} style="width:7.5rem;text-align:right" aria-label="Monto para la nota ${esc(x.numero||"")}"></label>`;}).join("")}</div>
+    <div class="card" style="gap:10px">
+      <div class="chips" role="group" aria-label="Forma de pago">${METODOS.map(m=>`<button type="button" data-vmet="${m.id}" aria-pressed="${m.id===met}">${esc(m.nombre)}</button>`).join("")}</div>
+      <div class="grid2">${bs?'<label class="f">Tasa (Bs por $)<input id="vTasa" inputmode="decimal" placeholder="0,00"></label>':""}<label class="f">Fecha<input id="vFecha" type="date" value="${hoy()}"></label><label class="f">Referencia<input id="vRef" autocomplete="off"></label></div>
+      ${esDueno?"":'<label class="f">Foto del comprobante (opcional)<input id="vFoto" type="file" accept="image/*"></label>'}
+      <div id="vTot" class="status"></div><div id="vErr" class="err" hidden></div>
+      <div class="toolbar"><span class="spacer"></span><button type="button" class="primary" id="vGo">${esDueno?"Registrar pago":"Enviar para aprobar"}</button></div></div>`);
+    $(".panel").style.width="min(720px,100%)";$("#pvX").onclick=vuelve;
+    const tot=()=>{const t=r2(Object.values(sel).reduce((a,v)=>a+(Number(v)||0),0)),n=Object.keys(sel).length,tz=bs?num($("#vTasa")?.value):0;
+      $("#vTot").innerHTML=n?`${n} nota${n>1?"s":""} · Total <b>${fmt(t)}</b>${bs&&tz>0?` = <b>${fmtBs(r2(t*tz))}</b>`:""}`:"Marca al menos una nota.";return t;};
+    document.querySelectorAll("[data-vn]").forEach(c=>c.onchange=()=>{const x=notas.find(z=>z.id===c.dataset.vn);if(c.checked)sel[x.id]=r2(saldoDisp(x));else delete sel[x.id];
+      const i=document.querySelector(`[data-vm="${CSS.escape(x.id)}"]`);i.disabled=!c.checked;i.value=c.checked?String(sel[x.id]).replace(".",","):"";tot();});
+    document.querySelectorAll("[data-vm]").forEach(i=>i.oninput=()=>{if(sel[i.dataset.vm]!=null)sel[i.dataset.vm]=r2(num(i.value));tot();});
+    document.querySelectorAll("[data-vmet]").forEach(b=>b.onclick=()=>{met=b.dataset.vmet;pint();});
+    $("#vTasa")&&($("#vTasa").oninput=tot);tot();
+    $("#vGo").onclick=async()=>{const e=$("#vErr");e.hidden=true;const fail=t=>{e.textContent=t;e.hidden=false;};
+      const ids=Object.keys(sel);if(!ids.length)return fail("Marca al menos una nota.");
+      for(const id of ids){const x=notas.find(z=>z.id===id),v=sel[id];if(!(v>0))return fail(`Escribe el monto para la nota ${x.numero||""}.`);if(v>saldoDisp(x)+0.01)return fail(`La nota ${x.numero||""} solo debe ${fmt(saldoDisp(x))}.`);}
+      const tz=bs?num($("#vTasa").value):1;if(bs&&!(tz>0))return fail("Escribe la tasa del día.");
+      const b=$("#vGo");b.disabled=true;b.textContent="Guardando…";const t=tot();const grupo="g"+Date.now().toString(36);const docs=[];
+      const ref=$("#vRef").value.trim(),fecha=$("#vFecha").value||hoy();
+      try{let foto=null;const file=$("#vFoto")?.files?.[0];if(file){let fo;try{fo=await achicarImg(file,1600,.85);}catch(_){fo=file;}foto=(await assets.upload(fo)).id;}
+        const quien=String(window.PERFIL?.email||"").split("@")[0];let i=0;
+        for(const id of ids.sort((a,b)=>notas.findIndex(z=>z.id===a)-notas.findIndex(z=>z.id===b))){const x=notas.find(z=>z.id===id),v=sel[id];
+          const comun={metodo:met,moneda:bs?"Bs":"USD",tasa:bs?tz:null,montoOriginal:bs?r2(v*tz):v,montoUSD:v,referencia:ref,fecha,creado:Date.now()+i,grupo,pagoTotalUSD:t,parte:(++i)+" de "+ids.length};
+          if(esDueno){const r=await db.collection("abonos").add({facturaId:x.id,cliente:x.cliente,...comun});docs.push({id:r?.id,facturaId:x.id,cliente:x.cliente,...comun});}
+          else{const d={estado:"pendiente",facturaId:x.id,numero:x.numero||"",cliente:x.cliente||"",vendedor:x.vendedor||"",email:window.PERFIL?.email||"",reportadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),foto,...comun};
+            const r=await db.collection("pagosVend").add(d);docs.push({id:r?.id,...d});}}
+        verRecibo(docs[0],esDueno?"abono":"pv",docs);
+      }catch(er){console.error(er);b.disabled=false;b.textContent=esDueno?"Registrar pago":"Enviar para aprobar";fail("No se pudo guardar. Intenta de nuevo.");}};};
+  pint();}
+/* Partes de un mismo pago (varias notas): abonos o pagos reportados con el mismo grupo o del mismo pago aprobado */
+function partesPago(x,tipo,extra){if(extra&&extra.length>1)return extra;if(!x||tipo==="nc")return [x];
+  const l=tipo==="abono"?abonos.filter(a=>(x.grupo&&a.grupo===x.grupo)||(x.pagoVendId&&a.pagoVendId===x.pagoVendId))
+    :pagosVend.filter(p=>x.grupo&&p.grupo===x.grupo&&p.estado!=="anulado");
+  return l.length>1?l.sort((a,b)=>(a.creado||0)-(b.creado||0)):[x];}
+function favDePago(x){return saldosFav.find(s=>(x.grupo&&s.grupo===x.grupo)||(x.pagoVendId&&s.pagoVendId===x.pagoVendId))||null;}
+function reciboDatosMulti(l,tipo){return l.map(x=>({x,...reciboDatos(x,tipo)}));}
 function reciboDatos(x,tipo){const f=facturas.find(z=>z.id===x.facturaId)||{};const tot=Number(f.montoUSD)||0;
   const antesDe=c=>{let p=Number(f.pagadoPrevio)||0;for(const a of abonos)if(a.facturaId===f.id&&a.id!==x.id&&(a.creado||0)<(c||0))p+=Number(a.montoUSD)||0;
     for(const n of ncOk())if(n.facturaId===f.id&&n.id!==x.id&&(n.creado||0)<(c||0))p+=Number(n.montoUSD)||0;return r2(tot-p);};
@@ -2462,7 +2515,49 @@ function reciboHTML(x,tipo){const {f,pend,antes,despues}=reciboDatos(x,tipo);con
     <div class="recTot"><div><small>${esNC?"Monto nota de crédito":"Monto pagado"}</small><strong>${fmtP(x.montoUSD)}</strong></div><div><small>Saldo anterior</small><strong>${fmtP(antes)}</strong></div><div><small>${pend?"Saldo al aprobarse":"Saldo pendiente"}</small><strong>${fmtP(despues)}</strong></div></div>
     <div class="firmas"><div>Por Distribuidora Belidai 18</div><div>Cliente (nombre y firma)</div></div></div>`;
   return `<div class="hojaDoc recHoja">${copia("")}</div>`;}
-function verRecibo(x,tipo){if(!x)return;const esNC=tipo==="nc";const {f}=reciboDatos(x,tipo);const volver=detId&&facturas.some(z=>z.id===detId)?detId:null;
+/* Recibo de un pago repartido en varias notas (y saldo a favor si sobró): una sola hoja de media página */
+function reciboMultiHTML(l,tipo){const D=reciboDatosMulti(l,tipo),x=l[0],f=D[0].f,pend=D.some(d=>d.pend),fv=favDePago(x),logo=$(".logo")?.src||"";
+  const tot=r2(l.reduce((a,y)=>a+(Number(y.montoUSD)||0),0)+(fv?Number(fv.montoUSD)||0:0));
+  const fila=(k,v)=>`<b>${esc(k)}</b><span>${esc(String(v||"—"))}</span>`;const filas=[fila("Cliente:",x.cliente||f.cliente)];
+  if(f.rif)filas.push(fila("RIF / C.I.:",fmtRif(f.rif)));filas.push(fila("Forma de pago:",pvMet(x.metodo)));
+  if(x.moneda==="Bs")filas.push(fila("Monto en Bs:",fmtBs(r2(tot*(Number(x.tasa)||0)))+"  a tasa "+String(x.tasa).replace(".",",")+" Bs/$"));
+  if(x.referencia)filas.push(fila("Referencia:",x.referencia));if(x.reportadoPor)filas.push(fila("Recibido por:",x.reportadoPor));
+  return `<div class="hojaDoc recHoja"><div class="recCopia"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:14px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:700">RECIBO DE PAGO</div><div>Fecha: ${fFecha(x.fecha||hoy())}</div></div></div>
+    ${pend?`<div class="recAviso">PAGO RECIBIDO, POR CONFIRMAR: se descuenta del saldo al verificarse.</div>`:""}
+    <div class="recFilas">${filas.join("")}</div>
+    <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:.95em"><thead><tr style="background:#ececec"><th style="text-align:left;padding:4px 6px">Nota</th><th style="text-align:left;padding:4px 6px">Fecha</th><th style="text-align:right;padding:4px 6px">Saldo anterior</th><th style="text-align:right;padding:4px 6px">Pagado</th><th style="text-align:right;padding:4px 6px">${pend?"Saldo al aprobarse":"Saldo pendiente"}</th></tr></thead><tbody>
+    ${D.map(d=>`<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 6px">N° ${esc(d.f.numero||d.x.numero||"—")}</td><td style="padding:4px 6px">${d.f.fecha?fFecha(d.f.fecha):""}</td><td style="text-align:right;padding:4px 6px">${fmtP(d.antes)}</td><td style="text-align:right;padding:4px 6px"><b>${fmtP(d.x.montoUSD)}</b></td><td style="text-align:right;padding:4px 6px">${fmtP(d.despues)}</td></tr>`).join("")}
+    ${fv?`<tr><td colspan="3" style="padding:4px 6px">Saldo a favor (para próximas compras)</td><td style="text-align:right;padding:4px 6px"><b>${fmtP(fv.montoUSD)}</b></td><td></td></tr>`:""}
+    <tr style="border-top:2px solid #333"><td colspan="3" style="padding:5px 6px"><b>TOTAL PAGADO</b> · ${D.length} nota${D.length>1?"s":""}</td><td style="text-align:right;padding:5px 6px;font-size:1.15em"><b>${fmtP(tot)}</b></td><td></td></tr></tbody></table>
+    <div class="firmas"><div>Por Distribuidora Belidai 18</div><div>Cliente (nombre y firma)</div></div></div></div>`;}
+function pdfReciboMulti(l,tipo,msgEl){const D=reciboDatosMulti(l,tipo),x=l[0],f=D[0].f,pend=D.some(d=>d.pend),fv=favDePago(x);
+  const tot=r2(l.reduce((a,y)=>a+(Number(y.montoUSD)||0),0)+(fv?Number(fv.montoUSD)||0:0));
+  const nom=("Recibo de pago "+D.map(d=>d.f.numero||d.x.numero||"").filter(Boolean).slice(0,3).join("-")+" "+String(x.cliente||f.cliente||"").slice(0,30)).replace(/[\\/:*?"<>|]/g,"-").trim();
+  guardarArchivo(nom,J=>{const d=new J({unit:"mm",format:"a5",orientation:"landscape"}),W=210,H=148,M=12,X1=W-M;const logo=$(".logo")?.src||"";let y=10;
+    if(logo){try{d.addImage(logo,"PNG",M,y,26,14);}catch(e){}}const tx=logo?M+30:M;
+    d.setFont("helvetica","bold");d.setFontSize(12);d.text("DISTRIBUIDORA BELIDAI 18, C.A.",tx,y+5);d.setFont("helvetica","normal");d.setFontSize(9);d.text("RIF J-50222387-8",tx,y+10);
+    d.setFont("helvetica","bold");d.setFontSize(13);d.text("RECIBO DE PAGO",X1,y+5,{align:"right"});d.setFont("helvetica","normal");d.setFontSize(9);d.text("Fecha: "+fFecha(x.fecha||hoy()),X1,y+10,{align:"right"});
+    y+=17;d.setLineWidth(.5);d.line(M,y,X1,y);y+=6;
+    if(pend){d.setFillColor(255,243,205);d.rect(M,y-4,X1-M,7,"F");d.setFont("helvetica","bold");d.setFontSize(9);d.setTextColor(146,64,14);d.text("PAGO RECIBIDO, POR CONFIRMAR: se descuenta del saldo al verificarse.",M+2,y+0.8);d.setTextColor(0);y+=8;}
+    const fila=(k,v)=>{d.setFont("helvetica","bold");d.setFontSize(9.5);d.text(k,M,y);d.setFont("helvetica","normal");d.text(String(v||"—"),M+34,y);y+=4.8;};
+    fila("Cliente:",x.cliente||f.cliente);if(f.rif)fila("RIF / C.I.:",fmtRif(f.rif));fila("Forma de pago:",pvMet(x.metodo));
+    if(x.moneda==="Bs")fila("Monto en Bs:",fmtBs(r2(tot*(Number(x.tasa)||0)))+"  a tasa "+String(x.tasa).replace(".",",")+" Bs/$");
+    if(x.referencia)fila("Referencia:",x.referencia);if(x.reportadoPor)fila("Recibido por:",x.reportadoPor);
+    y+=1;const cx=[M,M+30,M+62,M+108,M+144],cw=X1;const head=()=>{d.setFillColor(235,235,235);d.rect(M,y-3.8,X1-M,5.6,"F");d.setFont("helvetica","bold");d.setFontSize(8.5);
+      d.text("Nota",cx[0]+1,y);d.text("Fecha",cx[1],y);d.text("Saldo anterior",cx[3]-2,y,{align:"right"});d.text("Pagado",cx[4]-2,y,{align:"right"});d.text(pend?"Saldo al aprobarse":"Saldo pendiente",cw-1,y,{align:"right"});y+=5.5;};
+    head();d.setFont("helvetica","normal");d.setFontSize(9);
+    const linea=(a,b,c,e,g,bold)=>{if(y>H-26){d.addPage();y=14;head();d.setFont("helvetica","normal");d.setFontSize(9);}
+      d.setFont("helvetica",bold?"bold":"normal");d.text(a,cx[0]+1,y);if(b)d.text(b,cx[1],y);if(c)d.text(c,cx[3]-2,y,{align:"right"});d.setFont("helvetica","bold");d.text(e,cx[4]-2,y,{align:"right"});d.setFont("helvetica","normal");if(g)d.text(g,cw-1,y,{align:"right"});
+      d.setDrawColor(210);d.setLineWidth(.15);d.line(M,y+1.6,X1,y+1.6);y+=5.2;};
+    for(const r of D)linea("N° "+(r.f.numero||r.x.numero||"—"),r.f.fecha?fFecha(r.f.fecha):"",fmtP(r.antes),fmtP(r.x.montoUSD),fmtP(r.despues));
+    if(fv)linea("Saldo a favor (para próximas compras)","","",fmtP(fv.montoUSD),"");
+    d.setDrawColor(0);d.setLineWidth(.4);d.line(M,y-3.2,X1,y-3.2);y+=1;d.setFont("helvetica","bold");d.setFontSize(10.5);d.text("TOTAL PAGADO · "+D.length+" nota"+(D.length>1?"s":""),M+1,y);d.text(fmtP(tot),cx[4]-2,y,{align:"right"});
+    y=Math.max(y+16,H-16);if(y>H-8){d.addPage();y=40;}d.setLineWidth(.3);const sw=(X1-M-20)/2;d.line(M,y,M+sw,y);d.line(X1-sw,y,X1,y);d.setFont("helvetica","normal");d.setFontSize(8.5);
+    d.text("Por Distribuidora Belidai 18",M+sw/2,y+4,{align:"center"});d.text("Cliente (nombre y firma)",X1-sw/2,y+4,{align:"center"});
+    return d.output("blob");},msgEl||null);}
+function verRecibo(x,tipo,extra){if(!x)return;const L=partesPago(x,tipo,extra);if(L.length>1||(tipo!=="nc"&&favDePago(x)))return verReciboMulti(L,tipo);
+const esNC=tipo==="nc";const {f}=reciboDatos(x,tipo);const volver=detId&&facturas.some(z=>z.id===detId)?detId:null;
   panel(`<div class="ph"><div style="min-width:0"><div class="eyebrow">${esc(x.cliente||f.cliente||"")}${f.numero?" · Nota "+esc(f.numero):""}</div><h2>${esNC?"Nota de crédito "+esc(x.numero||""):"Recibo de pago"}</h2></div><button class="ghost" type="button" id="rvX" aria-label="${volver?"Volver a la nota":"Cerrar"}">✕</button></div>
   <div class="toolbar"><button class="primary" type="button" id="rvPrint">🖨 Imprimir</button><button type="button" id="rvPdf">Descargar PDF</button>${volver?'<span class="spacer"></span><button type="button" id="rvVolver">← Volver a la nota</button>':""}</div>
   <div id="rvMsg" class="status" hidden></div>
@@ -2475,6 +2570,15 @@ function verRecibo(x,tipo){if(!x)return;const esNC=tipo==="nc";const {f}=reciboD
     const quitar=()=>{st.remove();window.removeEventListener("afterprint",quitar);};window.addEventListener("afterprint",quitar);
     try{window.print();}catch(e){quitar();}};
   $("#rvPdf").onclick=()=>pdfRecibo(x,tipo,$("#rvMsg"));}
+function verReciboMulti(l,tipo){const x=l[0];const volver=detId&&facturas.some(z=>z.id===detId)?detId:null;
+  panel(`<div class="ph"><div style="min-width:0"><div class="eyebrow">${esc(x.cliente||"")}</div><h2>Recibo de pago · ${l.length} nota${l.length>1?"s":""}</h2></div><button class="ghost" type="button" id="rvX" aria-label="${volver?"Volver a la nota":"Cerrar"}">✕</button></div>
+  <div class="toolbar"><button class="primary" type="button" id="rvPrint">🖨 Imprimir</button><button type="button" id="rvPdf">Descargar PDF</button>${volver?'<span class="spacer"></span><button type="button" id="rvVolver">← Volver a la nota</button>':""}</div>
+  <div id="rvMsg" class="status" hidden></div><div class="hojaWrap">${reciboMultiHTML(l,tipo)}</div>
+  <p class="note" style="margin:0">Un solo recibo con todas las notas, en media hoja.</p>`);
+  $(".panel").style.width="min(860px,100%)";const atras=()=>volver?abrirDetalle(volver):cerrar();$("#rvX").onclick=atras;$("#rvVolver")&&($("#rvVolver").onclick=atras);
+  $("#rvPrint").onclick=()=>{$("#printArea").innerHTML=reciboMultiHTML(l,tipo);const st=document.createElement("style");st.textContent="@media print{@page{size:A5 landscape;margin:8mm}#printArea .recHoja{font-size:9pt}}";document.head.appendChild(st);
+    const quitar=()=>{st.remove();window.removeEventListener("afterprint",quitar);};window.addEventListener("afterprint",quitar);try{window.print();}catch(e){quitar();}};
+  $("#rvPdf").onclick=()=>pdfReciboMulti(l,tipo,$("#rvMsg"));}
 function abrirNCLista(){panel(`<div class="ph"><div><div class="eyebrow">Cuentas por cobrar</div><h2>Notas de crédito</h2><div class="note">Devoluciones, descuentos y ajustes. Bajan el saldo del cliente, pero no cuentan como cobranza ni para comisiones.</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
   <div class="card" style="display:grid;gap:8px"><b>Hacer una nota de crédito</b><input id="ncBus" type="search" placeholder="Busca la nota por número o cliente" autocomplete="off"><div id="ncRes"></div></div>
   <div id="ncLista"></div><div id="ncMsg"></div>`);
