@@ -408,7 +408,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
 .pvCard img{width:110px;height:140px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:zoom-in}
 .pvCard .noimg{width:110px;height:140px;border-radius:8px;border:1px dashed var(--line);display:grid;place-items:center;color:var(--muted);font-size:.8rem;text-align:center}
 .pvEst{display:inline-block;font-size:.75rem;font-weight:600;border-radius:999px;padding:2px 9px}
-.pvEst.pendiente{background:#fff4d6;color:#7a5400}.pvEst.aprobado{background:#e1f3e7;color:#1f6b3a}.pvEst.rechazado{background:#fbe3e1;color:#a3302a}
+.pvEst.pendiente{background:#fff4d6;color:#7a5400}.pvEst.aprobado{background:#e1f3e7;color:#1f6b3a}.pvEst.rechazado{background:#fbe3e1;color:#a3302a}.pvEst.anulado{background:#ececec;color:#666;text-decoration:line-through}
 .badgeN.ok{background:#1f6b3a}
 .repNuevo{display:inline-block;font-size:.7rem;font-weight:700;background:#1f6b3a;color:#fff;border-radius:999px;padding:1px 7px;margin-right:4px}
 .badgeN{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--bad,#a3302a);color:#fff;font-size:.75rem;font-weight:700;margin-left:6px}
@@ -1481,7 +1481,7 @@ function renderDetalle(first){
     ${f.moneda==="Bs"?`<div class="note">Nota original: ${fmtBs(f.montoOriginal)} a tasa ${String(f.tasa).replace(".",",")} Bs/$</div>`:""}
   </div>
   ${(()=>{const pv=pagosVend.filter(x=>x.facturaId===f.id&&(x.estado==="pendiente"||x.estado==="rechazado")).sort((a,b)=>(b.creado||0)-(a.creado||0)).slice(0,5);
-    return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}${x.estado==="pendiente"?` <button type="button" class="linkbtn" data-recpv="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</div>`).join("")}</div>`:"";})()}
+    return pv.length?`<div class="card" style="gap:6px"><b>Pagos reportados</b>${pv.map(x=>`<div class="note"><span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"Por aprobar":"Rechazado"}</span> ${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))} · ${pvMonto(x)} · por ${esc(x.reportadoPor||x.vendedor||"")}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}${x.estado==="pendiente"?` <button type="button" class="linkbtn" data-recpv="${esc(x.id)}">🧾 Ver / Imprimir</button> ${botonAnularPV(x)}`:""}</div>`).join("")}</div>`:"";})()}
   ${f.saldo>0&&favTotal(f)>0?`<div class="card" style="gap:8px;background:#ecf8f0;border-color:#a9dcb9"><div><b>💚 ${esc(f.cliente)} tiene ${fmt(favTotal(f))} de saldo a favor</b><div class="note">Lo pagó de más antes. Puedes usarlo para esta nota.</div></div>
     ${esDueno?`<div class="toolbar" style="margin:0"><button type="button" class="primary" id="favAplicar">Aplicar ${fmt(Math.min(f.saldo,favTotal(f)))} a esta nota</button></div><div id="favMsg" class="status" hidden></div>`:`<div class="note">El dueño puede aplicarlo desde aquí.</div>`}</div>`:""}
   ${canWrite&&f.saldo>0?`<form class="card" id="fAbono" novalidate>
@@ -1526,6 +1526,7 @@ function renderDetalle(first){
   ncBind(f);
   document.querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>verRecibo(abonos.find(x=>x.id===b.dataset.rec),"abono"));
   document.querySelectorAll("[data-recpv]").forEach(b=>b.onclick=()=>verRecibo(pagosVend.find(x=>x.id===b.dataset.recpv),"pv"));
+  enlazarAnularPV($(".panel")||document,$("#recMsg"));
   $("#recUlt")&&($("#recUlt").onclick=()=>{const u=ultRecibo;const l=u.t==="nc"?notasCred:u.t==="pv"?pagosVend:abonos;verRecibo(l.find(x=>x.id===u.id)||u.doc,u.t);});
   for(const bid of ["#dFoto","#dFotoCambiar"])$(bid)&&($(bid).onclick=()=>elegirFoto(async file=>{const m=$("#dFotoMsg");m.hidden=false;m.className="status";m.innerHTML='<span class="spin"></span><span>Subiendo foto…</span>';
     try{const img=await subirFoto(file);await db.doc("facturas/"+f.id).update({imagen:img});m.className="status ok";m.textContent="✓ Foto guardada.";}catch(e){m.className="status err";m.textContent="No se pudo subir la foto. Prueba con otra imagen.";}}));
@@ -2077,6 +2078,14 @@ $("#btnEdoVend2").onclick=()=>abrirEdoVend("");
 
 /* ---------- Pagos reportados por los vendedores ---------- */
 var pagosVend=[],loadedPV=false;
+/* Eliminar un pago por aprobar cargado por error o repetido. Queda como "eliminado" (no se borra del todo, para llevar control). */
+const puedeAnularPV=x=>x&&x.estado==="pendiente"&&canWrite&&!(typeof esVendedor==="function"&&esVendedor());
+function botonAnularPV(x){return puedeAnularPV(x)?`<button type="button" class="linkbtn" data-anpv="${esc(x.id)}" style="color:var(--bad)">🗑 Eliminar</button>`:"";}
+function enlazarAnularPV(root,msgEl){(root||document).querySelectorAll("[data-anpv]").forEach(b=>b.onclick=async e=>{e.stopPropagation();const x=pagosVend.find(p=>p.id===b.dataset.anpv);if(!puedeAnularPV(x))return;
+  if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Eliminar este pago? Toca otra vez";setTimeout(()=>{if(b.isConnected){delete b.dataset.ok;b.textContent="🗑 Eliminar";}},4000);return;}
+  b.disabled=true;b.textContent="Eliminando…";const quien=String(window.PERFIL?.email||"").split("@")[0];
+  try{await db.doc("pagosVend/"+x.id).update({estado:"anulado",anuladoPor:quien.charAt(0).toUpperCase()+quien.slice(1),anuladoEn:Date.now()});}
+  catch(er){console.error(er);b.disabled=false;b.textContent="🗑 Eliminar";if(msgEl){msgEl.className="status err";msgEl.textContent="No se pudo eliminar. Intenta de nuevo.";msgEl.hidden=false;}}});}
 /* Saldo a favor: lo que un cliente pagó de más y se usa en sus próximas notas */
 var saldosFav=[];
 const favDe=f=>saldosFav.filter(x=>(Number(x.restante)||0)>0.009&&mismoCliPago(x,f)).sort((a,b)=>(a.creado||0)-(b.creado||0));
@@ -2229,8 +2238,8 @@ function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;
   if(sec!=="rep")return;
   if(!esDueno&&loadedPV)try{localStorage.setItem("db18.repVisto",String(Date.now()));}catch(e){}
   const nvId=new Set(nuevos.map(x=>x.id));
-  const cnt={pendiente:0,aprobado:0,rechazado:0};for(const x of pagosVend)if(cnt[x.estado]!=null)cnt[x.estado]++;
-  const ops=[["pendiente","Por aprobar"],["aprobado","Aprobados"],["rechazado","Rechazados"],["todos","Todos"]];
+  const cnt={pendiente:0,aprobado:0,rechazado:0,anulado:0};for(const x of pagosVend)if(cnt[x.estado]!=null)cnt[x.estado]++;
+  const ops=[["pendiente","Por aprobar"],["aprobado","Aprobados"],["rechazado","Rechazados"],...(cnt.anulado?[["anulado","Eliminados"]]:[]),["todos","Todos"]];
   $("#repChips").innerHTML=ops.map(([k,t])=>`<button type="button" data-rf="${k}" aria-pressed="${k===repF}">${t}${k!=="todos"?` (${cnt[k]})`:` (${pagosVend.length})`}</button>`).join("");
   $("#repChips").querySelectorAll("[data-rf]").forEach(b=>b.onclick=()=>{repF=b.dataset.rf;renderRep();});
   const el=$("#repLista");
@@ -2243,9 +2252,10 @@ function renderRep(){const n=pagosVend.filter(x=>x.estado==="pendiente").length;
   el.innerHTML=(nuevos.length?`<div class="status ok" role="status" style="margin-bottom:8px">✓ Desde tu última visita: ${nA?`<b>${nA}</b> aprobado${nA>1?"s":""}`:""}${nA&&nR?" y ":""}${nR?`<b>${nR}</b> rechazado${nR>1?"s":""}`:""}. Salen marcados como <b>Nuevo</b>.</div>`:"")+`<div class="list">${l.slice(0,300).map(x=>`<div class="prow" style="grid-template-columns:minmax(0,1fr) auto auto;align-items:center">
     <span style="min-width:0" class="lk" role="button" tabindex="0" data-repver="${esc(x.facturaId)}" title="Ver la cuenta de esta nota"><div class="cl" style="white-space:normal">${esc(x.cliente||"")} · Nota ${esc(x.numero||"—")}</div>
       <div class="sub" style="white-space:normal">${fFecha(x.fecha)} · ${esc(pvMet(x.metodo))}${x.referencia?" · Ref. "+esc(x.referencia):""} · cargado por <b>${esc(x.reportadoPor||x.vendedor||"")}</b>${x.revisado&&x.estado!=="pendiente"?" · revisado "+fFecha(new Date(x.revisado-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)):""}${x.estado==="rechazado"&&x.motivo?` · <b style="color:var(--bad)">${esc(x.motivo)}</b>`:""}</div>
-      <div class="sub" style="margin-top:3px">${nvId.has(x.id)?'<span class="repNuevo">Nuevo</span>':""}<span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":"Rechazado"}</span> ${pvMonto(x)}</div></span>
+      <div class="sub" style="margin-top:3px">${nvId.has(x.id)?'<span class="repNuevo">Nuevo</span>':""}<span class="pvEst ${esc(x.estado)}">${x.estado==="pendiente"?"⏳ Por aprobar":x.estado==="aprobado"?"✓ Aprobado":x.estado==="anulado"?"Eliminado":"Rechazado"}</span> ${pvMonto(x)}${x.estado==="anulado"&&x.anuladoPor?` · eliminado por ${esc(x.anuladoPor)}`:""}</div></span>
     <span class="num" style="font-weight:600">${fmt(x.montoUSD)}</span>
-    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado!=="rechazado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}</span></div>`).join("")}</div>`;
+    <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${x.foto&&window.BLOB?`<button type="button" data-repfoto="${esc(x.id)}">Comprobante</button>`:""}${x.estado==="pendiente"||x.estado==="aprobado"?`<button type="button" class="primary" data-reprec="${esc(x.id)}">🧾 Ver / Imprimir</button>`:""}${puedeAnularPV(x)?`<button type="button" class="ghost" data-anpv="${esc(x.id)}" style="color:var(--bad)">🗑 Eliminar</button>`:""}</span></div>`).join("")}</div>`;
+  enlazarAnularPV(el,$("#repMsg"));
   el.querySelectorAll("[data-repver]").forEach(b=>{const go=()=>{if(facturas.some(f=>f.id===b.dataset.repver))abrirDetalle(b.dataset.repver);else{const m=$("#repMsg");m.hidden=false;m.className="status err";m.textContent="Esa nota ya no existe en cuentas por cobrar.";}};b.onclick=go;b.onkeydown=e=>{if(e.key==="Enter")go();};});
   el.querySelectorAll("[data-repfoto]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.repfoto);if(x)verImagen(BLOB+x.foto);});
   el.querySelectorAll("[data-reprec]").forEach(b=>b.onclick=()=>{const x=pagosVend.find(p=>p.id===b.dataset.reprec);if(!x)return;
