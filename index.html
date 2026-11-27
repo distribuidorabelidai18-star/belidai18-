@@ -603,6 +603,25 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
     <p class="note" style="margin:0">Solo tú ves esta sección. Toca un empleado para registrar adelantos, pagarle la semana o cambiar su sueldo.</p>
   </div>
 
+  <div class="sec" id="sec-dev" hidden>
+    <p class="note" style="margin:0">Lo que los clientes devuelven por malo. Lleva el control por proveedor y saca el reporte para reclamarle.</p>
+    <form class="card" id="dvForm" novalidate style="display:grid;gap:10px">
+      <h3 style="font-size:1.05rem">Registrar devolución</h3>
+      <div class="grid2"><label class="f">Cliente<input id="dvCli" list="dlCli" autocomplete="off" placeholder="Nombre del cliente"></label><label class="f">Nota de entrega (opcional)<input id="dvNota" autocomplete="off" placeholder="N°"></label></div>
+      <div class="grid2"><label class="f">Producto (código, referencia o nombre)<input id="dvProd" data-sug="prod" autocomplete="off"></label><label class="f">Cantidad<input id="dvCant" inputmode="numeric" placeholder="1"></label></div>
+      <div class="chips" role="group" aria-label="Motivo" id="dvMot"></div>
+      <div class="grid2"><label class="f">Proveedor<input id="dvProv" list="dlProvs" autocomplete="off" placeholder="¿A quién se le compró?"></label><label class="f">Fecha<input id="dvFecha" type="date"></label></div>
+      <label class="f">Detalle (opcional)<input id="dvDet" autocomplete="off" placeholder="Ej: no enciende, viene partido, le falta una pieza…"></label>
+      <label class="f">Foto (opcional)<input id="dvFoto" type="file" accept="image/*"></label>
+      <div id="dvErr" class="err" hidden></div>
+      <div class="toolbar"><span class="note" id="dvOk"></span><span class="spacer"></span><button class="primary" type="submit" id="dvGo">Guardar devolución</button></div>
+    </form>
+    <div class="toolbar"><div class="tabs" role="group" aria-label="Estado" id="dvTabs"></div><span class="spacer"></span>
+      <select id="dvFProv" aria-label="Proveedor"></select><input id="dvQ" type="search" placeholder="Buscar producto o cliente" autocomplete="off" style="max-width:220px">
+      <button type="button" id="dvRep">📄 Reporte al proveedor</button></div>
+    <div id="dvMsg" class="status" hidden></div>
+    <div id="dvLista"></div>
+  </div>
   <div class="sec" id="sec-inv" hidden>
     <div class="toolbar"><div class="tabs" role="group" aria-label="Inventario" id="ivTabs">
       <button type="button" data-it="exist" aria-pressed="true">Existencias</button>
@@ -868,6 +887,7 @@ body[data-rol="vendedor"] #cxcActions{display:none!important}
   <button type="button" class="navi" data-sec="pedido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Crear pedido y packing list</button>
   <button type="button" class="navi" data-sec="cot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h4"/><path d="M16.5 15.5l1.5 1.5"/></svg>Cotizaciones</button>
   <button type="button" class="navi" data-sec="inv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v13H4z"/><path d="M2 4h20v3H2zM9 11h6"/></svg>Inventario</button>
+  <button type="button" class="navi" data-sec="dev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Devoluciones</button>
 </nav>
 </div>
 <div class="menuScrim" id="menuScrim"></div>
@@ -1645,7 +1665,7 @@ document.querySelectorAll("[data-eye]").forEach(x=>x.onclick=()=>{verSaldo=!verS
 
 /* ---------- Menú y secciones ---------- */
 let sec="cxc";
-const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",rep:"Pagos verificados",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas"};
+const TIT={mv:"Mis cobros",cxc:"Cuentas por cobrar",rep:"Pagos verificados",clientes:"Clientes",ne:"Notas de entrega",prov:"Proveedores",gastos:"Cuentas por pagar compañía",emp:"Empleados",vend:"Vendedores",pedido:"Pedido y packing list",cot:"Cotizaciones",inv:"Inventario",precios:"Lista de precios",ofe:"Ofertas",dev:"Devoluciones de clientes"};
 var productos=[],loadedProd=false,pedidos=[],loadedPed=false,cfgPed={prefijo:"P-",inicio:1},pedTab="armar";
 function abrirMenu(){document.body.classList.add("menu-open");$("#btnMenu").setAttribute("aria-expanded","true");}
 function cerrarMenu(){document.body.classList.remove("menu-open");$("#btnMenu").setAttribute("aria-expanded","false");}
@@ -1659,6 +1679,79 @@ function ir(s){if(window.PERFIL?.rol==="vendedor"){if(s!=="precios")s="mv";}else
   cerrarMenu();render();window.scrollTo(0,0);
   try{localStorage.setItem("db18.sec",s);}catch(e){}}
 document.querySelectorAll(".side [data-sec]").forEach(b=>b.onclick=()=>ir(b.dataset.sec));
+
+/* ---------- Devoluciones de clientes (mercancía mala) para reclamar al proveedor ---------- */
+var devs=[],dvEst="por_reportar",dvMotSel="defecto";
+const DV_MOT=[{id:"defecto",n:"Defecto de fábrica"},{id:"danado",n:"Llegó dañado"},{id:"nofunciona",n:"No funciona"},{id:"incompleto",n:"Incompleto"},{id:"otro",n:"Otro"}];
+const DV_EST=[{id:"por_reportar",n:"Por reportar"},{id:"reportado",n:"Reportado"},{id:"repuesto",n:"Repuesto / pagado"},{id:"todos",n:"Todas"}];
+const dvMotN=id=>DV_MOT.find(m=>m.id===id)?.n||id||"";
+function provDeProducto(codigo){let best=null;for(const d of invDocs)if(d.tipo!=="ajuste"&&d.proveedor&&(d.items||[]).some(i=>String(i.codigo)===String(codigo))&&(!best||(d.creado||0)>(best.creado||0)))best=d;return best?.proveedor||"";}
+function renderDev(){if(sec!=="dev")return;
+  $("#dvMot").innerHTML=DV_MOT.map(m=>`<button type="button" data-dm="${m.id}" aria-pressed="${m.id===dvMotSel}">${esc(m.n)}</button>`).join("");
+  $("#dvMot").querySelectorAll("[data-dm]").forEach(b=>b.onclick=()=>{dvMotSel=b.dataset.dm;renderDev();});
+  if(!$("#dvFecha").value)$("#dvFecha").value=hoy();
+  const cnt={};for(const d of devs)cnt[d.estado]=(cnt[d.estado]||0)+1;
+  $("#dvTabs").innerHTML=DV_EST.map(e=>`<button type="button" data-de="${e.id}" aria-pressed="${e.id===dvEst}">${esc(e.n)} (${e.id==="todos"?devs.length:cnt[e.id]||0})</button>`).join("");
+  $("#dvTabs").querySelectorAll("[data-de]").forEach(b=>b.onclick=()=>{dvEst=b.dataset.de;renderDev();});
+  const provs=[...new Set([...PROVS,...devs.map(d=>d.proveedor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,"es"));const ps=$("#dvFProv"),pv=ps.value;
+  ps.innerHTML=`<option value="">Todos los proveedores</option>`+provs.map(p=>`<option ${p===pv?"selected":""}>${esc(p)}</option>`).join("")+(devs.some(d=>!d.proveedor)?`<option value="-" ${pv==="-"?"selected":""}>(sin proveedor)</option>`:"");
+  const q=$("#dvQ").value.trim().toLowerCase();
+  const l=devs.filter(d=>(dvEst==="todos"||d.estado===dvEst)&&(!ps.value||(ps.value==="-"?!d.proveedor:d.proveedor===ps.value))&&(!q||[d.cliente,d.referencia,d.descripcion,d.codigo,d.nota].some(v=>String(v||"").toLowerCase().includes(q))))
+    .sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))||(b.creado||0)-(a.creado||0));
+  const el=$("#dvLista");
+  if(!l.length){el.innerHTML=`<div class="list"><div class="empty"><strong>No hay devoluciones aquí</strong></div></div>`;return;}
+  const tot=l.reduce((t,d)=>t+(Number(d.cantidad)||0),0);
+  el.innerHTML=`<div class="note" style="margin-bottom:6px">${l.length} registro${l.length>1?"s":""} · ${tot} pieza${tot>1?"s":""}</div><div class="list">${l.slice(0,400).map(d=>`<div class="prow" style="grid-template-columns:minmax(0,1fr) auto;align-items:center">
+    <span style="min-width:0"><div class="cl" style="white-space:normal"><b>${Number(d.cantidad)||0} × ${esc(d.referencia||d.codigo||"")}</b> · ${esc(d.descripcion||"")}</div>
+    <div class="sub" style="white-space:normal">${fFecha(d.fecha)} · ${esc(d.cliente||"")}${d.nota?" · Nota "+esc(d.nota):""} · <b>${esc(dvMotN(d.motivo))}</b>${d.detalle?" · "+esc(d.detalle):""}</div>
+    <div class="sub">Proveedor: <b>${esc(d.proveedor||"—")}</b>${d.creadoPor?" · cargó "+esc(d.creadoPor):""}</div></span>
+    <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center">${d.foto&&window.BLOB?`<button type="button" data-dvf="${esc(d.id)}">Foto</button>`:""}
+      <select data-dvs="${esc(d.id)}" aria-label="Estado">${DV_EST.filter(e=>e.id!=="todos").map(e=>`<option value="${e.id}" ${e.id===d.estado?"selected":""}>${esc(e.n)}</option>`).join("")}</select>
+      ${esDueno?`<button type="button" class="ghost" data-dvx="${esc(d.id)}" style="color:var(--bad)" aria-label="Borrar">🗑</button>`:""}</span></div>`).join("")}</div>`;
+  el.querySelectorAll("[data-dvf]").forEach(b=>b.onclick=()=>{const d=devs.find(x=>x.id===b.dataset.dvf);if(d)verImagen(BLOB+d.foto);});
+  el.querySelectorAll("[data-dvs]").forEach(sl=>sl.onchange=async()=>{try{await db.doc("devoluciones/"+sl.dataset.dvs).update({estado:sl.value,...(sl.value==="reportado"?{reportadoEn:hoy()}:{}),...(sl.value==="repuesto"?{repuestoEn:hoy()}:{})});}catch(e){dvMsg("No se pudo cambiar. Intenta de nuevo.","err");}});
+  el.querySelectorAll("[data-dvx]").forEach(b=>b.onclick=async()=>{if(!b.dataset.ok){b.dataset.ok=1;b.textContent="¿Borrar?";setTimeout(()=>{if(b.isConnected){delete b.dataset.ok;b.textContent="🗑";}},3000);return;}
+    try{await db.doc("devoluciones/"+b.dataset.dvx).delete();}catch(e){dvMsg("No se pudo borrar.","err");}});}
+function dvMsg(t,c){const m=$("#dvMsg");m.className="status "+(c||"ok");m.innerHTML=t;m.hidden=false;}
+$("#dvProd").addEventListener("change",()=>{const p=buscarProducto($("#dvProd").value);if(p&&!$("#dvProv").value.trim()){const pv=provDeProducto(p.codigo);if(pv)$("#dvProv").value=pv;}});
+$("#dvQ").oninput=renderDev;$("#dvFProv").onchange=renderDev;
+$("#dvForm").onsubmit=async e=>{e.preventDefault();const er=$("#dvErr");er.hidden=true;const fail=t=>{er.textContent=t;er.hidden=false;};
+  const cli=$("#dvCli").value.trim();if(!cli)return fail("Escribe el cliente.");
+  const p=buscarProducto($("#dvProd").value);if(!p)return fail("Elige el producto de la lista.");
+  const n=Math.floor(num($("#dvCant").value)||0);if(!(n>0))return fail("Escribe cuántas piezas devolvió.");
+  const b=$("#dvGo");b.disabled=true;b.textContent="Guardando…";
+  try{let foto=null;const file=$("#dvFoto").files?.[0];if(file){let fo;try{fo=await achicarImg(file,1600,.85);}catch(_){fo=file;}foto=(await assets.upload(fo)).id;}
+    const quien=String(window.PERFIL?.email||"").split("@")[0];
+    await db.collection("devoluciones").add({fecha:$("#dvFecha").value||hoy(),cliente:cli,nota:$("#dvNota").value.trim(),codigo:String(p.codigo),referencia:p.referencia||"",descripcion:p.descripcion||"",marca:marcaDe(p)||"",
+      cantidad:n,motivo:dvMotSel,detalle:$("#dvDet").value.trim(),proveedor:$("#dvProv").value.trim(),estado:"por_reportar",foto,creadoPor:quien.charAt(0).toUpperCase()+quien.slice(1),creado:Date.now()});
+    $("#dvProd").value="";$("#dvCant").value="";$("#dvDet").value="";$("#dvFoto").value="";$("#dvProv").value="";
+    $("#dvOk").textContent=`✓ Guardado: ${n} × ${p.referencia||p.codigo}. Puedes seguir con otro producto del mismo cliente.`;$("#dvProd").focus();}
+  catch(er2){console.error(er2);fail("No se pudo guardar. Intenta de nuevo.");}
+  b.disabled=false;b.textContent="Guardar devolución";};
+/* Reporte para el proveedor: agrupado por producto, para imprimir, PDF o Excel */
+function dvLista(prov){return devs.filter(d=>d.proveedor===prov&&(dvEst==="todos"?true:d.estado===dvEst));}
+function dvReporteHTML(prov,l){const g={};for(const d of l){const k=d.codigo||d.referencia;(g[k]=g[k]||{ref:d.referencia||d.codigo,desc:d.descripcion||"",n:0,mot:new Set(),det:[]});g[k].n+=Number(d.cantidad)||0;g[k].mot.add(dvMotN(d.motivo));if(d.detalle)g[k].det.push(d.detalle);}
+  const rows=Object.values(g).sort((a,b)=>b.n-a.n);const tot=rows.reduce((t,r)=>t+r.n,0);const fs=l.map(d=>d.fecha).filter(Boolean).sort();const logo=$(".logo")?.src||"";
+  return `<div class="hojaDoc"><div class="phead"><div style="display:flex;gap:12px;align-items:center">${logo?`<img src="${logo}" alt="">`:""}<div><div style="font-size:14px;font-weight:700">DISTRIBUIDORA BELIDAI 18, C.A.</div><div>RIF J-50222387-8</div></div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:700">REPORTE DE MERCANCÍA DEFECTUOSA</div><div>Proveedor: <b>${esc(prov)}</b></div><div>Fecha: ${fFecha(hoy())}${fs.length?` · Período ${fFecha(fs[0])} al ${fFecha(fs[fs.length-1])}`:""}</div></div></div>
+    <table style="width:100%;border-collapse:collapse;margin-top:12px"><thead><tr style="background:#ececec"><th style="text-align:left;padding:5px">Referencia</th><th style="text-align:left;padding:5px">Descripción</th><th style="text-align:right;padding:5px">Piezas</th><th style="text-align:left;padding:5px">Falla</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr style="border-bottom:1px solid #ddd"><td style="padding:5px"><b>${esc(r.ref)}</b></td><td style="padding:5px">${esc(r.desc)}</td><td style="text-align:right;padding:5px"><b>${r.n}</b></td><td style="padding:5px">${esc([...r.mot].join(", "))}${r.det.length?`<div style="font-size:.85em;color:#555">${esc([...new Set(r.det)].slice(0,4).join(" · "))}</div>`:""}</td></tr>`).join("")}
+    <tr style="border-top:2px solid #333"><td colspan="2" style="padding:6px"><b>TOTAL</b> · ${rows.length} producto${rows.length>1?"s":""}</td><td style="text-align:right;padding:6px"><b>${tot}</b></td><td></td></tr></tbody></table>
+    <div class="firmas"><div>Por Distribuidora Belidai 18</div><div>Recibido por ${esc(prov)}</div></div></div>`;}
+$("#dvRep").onclick=()=>{const prov=$("#dvFProv").value;if(!prov||prov==="-")return dvMsg("Primero elige el proveedor en la lista de arriba.","err");
+  const l=dvLista(prov);if(!l.length)return dvMsg(`No hay devoluciones de ${esc(prov)} en "${esc(DV_EST.find(e=>e.id===dvEst).n)}".`,"err");
+  panel(`<div class="ph"><div><div class="eyebrow">Devoluciones</div><h2>Reporte para ${esc(prov)}</h2><div class="note">${l.length} registro${l.length>1?"s":""} (${esc(DV_EST.find(e=>e.id===dvEst).n)}).</div></div><button class="ghost" type="button" onclick="cerrar()" aria-label="Cerrar">✕</button></div>
+    <div class="toolbar"><button class="primary" type="button" id="drPrint">🖨 Imprimir / PDF</button><button type="button" id="drXls">📊 Excel</button>${l.some(d=>d.estado==="por_reportar")?'<span class="spacer"></span><button type="button" id="drMarcar">✓ Marcar como reportadas</button>':""}</div>
+    <div id="drMsg" class="status" hidden></div><div class="hojaWrap">${dvReporteHTML(prov,l)}</div>`);
+  $(".panel").style.width="min(900px,100%)";
+  $("#drPrint").onclick=()=>{$("#printArea").innerHTML=dvReporteHTML(prov,l);try{window.print();}catch(e){}};
+  $("#drXls").onclick=async()=>{try{const X=await cargarXlsx();const filas=[["Fecha","Cliente","Nota","Referencia","Descripción","Piezas","Falla","Detalle","Estado"],...l.map(d=>[d.fecha,d.cliente,d.nota||"",d.referencia||d.codigo,d.descripcion||"",Number(d.cantidad)||0,dvMotN(d.motivo),d.detalle||"",DV_EST.find(e=>e.id===d.estado)?.n||d.estado])];
+    const ws=X.utils.aoa_to_sheet(filas);ws["!cols"]=[{wch:11},{wch:28},{wch:10},{wch:16},{wch:40},{wch:7},{wch:18},{wch:30},{wch:14}];const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,"Devoluciones");
+    const blob=new Blob([X.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`Devoluciones ${prov} ${hoy()}.xlsx`;document.body.append(a);a.click();a.remove();
+    const m=$("#drMsg");m.className="status ok";m.textContent="✓ Excel descargado.";m.hidden=false;}catch(e){const m=$("#drMsg");m.className="status err";m.textContent="No se pudo hacer el Excel.";m.hidden=false;}};
+  $("#drMarcar")&&($("#drMarcar").onclick=async e=>{const b=e.target;b.disabled=true;try{for(const d of l.filter(x=>x.estado==="por_reportar"))await db.doc("devoluciones/"+d.id).update({estado:"reportado",reportadoEn:hoy()});b.textContent="✓ Marcadas como reportadas";}catch(er){b.disabled=false;const m=$("#drMsg");m.className="status err";m.textContent="No se pudieron marcar todas.";m.hidden=false;}});};
+{const _rd=render;render=function(){_rd();renderDev();};}
+activarSug($("#dvProd"));
 
 /* ---------- Vendedores ---------- */
 function renderVend(){
@@ -4343,6 +4436,7 @@ function banner(t){const b=$("#banner");b.textContent=t;b.hidden=!t;}
     document.querySelectorAll(".side [data-sec]").forEach(b=>b.hidden=!["mv","precios"].includes(b.dataset.sec));ir("mv");}
   else if(esDueno){iniciarProv();$("#lpPubVend").hidden=false;_pubOn=true;$("#btnTasa").hidden=false;$('.side [data-sec="ofe"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="ofe")ir("ofe");}catch(e){}}
   if(!esVendedor()){$('.side [data-sec="rep"]').hidden=false;try{if(localStorage.getItem("db18.sec")==="rep")ir("rep");}catch(e){}}
+  db.collection("devoluciones").onSnapshot(s=>{devs=s.docs.map(d=>({id:d.id,...d.data()}));renderDev();},()=>{});
   db.collection("saldosFavor").onSnapshot(s=>{saldosFav=s.docs.map(d=>({id:d.id,...d.data()}));if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{});
   db.collection("pagosVend").onSnapshot(s=>{pagosVend=s.docs.map(d=>({id:d.id,...d.data()}));loadedPV=true;renderMv();renderPorAprobar();renderRep();if(detId&&$(".totals")&&!$("#fAbono")?.contains(document.activeElement))renderDetalle(false);},()=>{loadedPV=true;renderMv();});
   if(canWrite&&!esVendedor())_pubOn=true; // Carmen y Skarlet también actualizan la lista de pedidos al hacer notas
